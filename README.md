@@ -1,36 +1,38 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ledgerline — invoice decision workbench
 
-## Getting Started
+Takes a vendor PDF and produces a defendable AP decision: extract → normalize (tax, shipping, FX) → match remaining PO balance (including multi-PO) → policy rules → recommendation with a full audit trail.
 
-First, run the development server:
+## Run
 
 ```bash
+npm install
+npx tsx src/lib/db/seed.ts
+npm test
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Optional durable runner:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run dev:inngest
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Optional live vision: set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Without a key, seeded fixtures and digital PDF parse still run; scanned pages fall back to Tesseract.
 
-## Learn More
+Open http://localhost:3000 and click a demo case.
 
-To learn more about Next.js, take a look at the following resources:
+## Demo cases
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Split / partial billing against PO-31000
+2. Implied PO (no number on the invoice)
+3. Tax / shipping structure mismatch
+4. Near-duplicate of INV-8842
+5. EUR invoice vs USD PO (FX)
+6. Multi-PO bundling with mixed outcomes
+7. Low-confidence scan → human review
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Operations: email intake, vendor/PO book, durable queue
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Email intake** — `POST /api/intake/email` (raw `message/rfc822`, or multipart field `email`; guard with `INTAKE_SECRET`) or set `IMAP_HOST/IMAP_USER/IMAP_PASSWORD` and the worker polls the mailbox. Every PDF/image attachment becomes a case. Deduped on Message-ID.
+- **Vendor/PO book** — upload `vendors.csv`, `pos.csv`, `po_lines.csv` on the Operations page, or drop them in `data/master/` (the worker re-imports when they change). Bad rows are skipped and reported, never half-applied.
+- **Durable queue** — jobs live in SQLite with leases, exponential backoff retries (5s → 20s → 80s…), dead-letter after 4 attempts, and stale-lease recovery after a crash. The worker starts via `src/instrumentation.ts` and drains on startup. Inspect/retry at `/operations` or `GET/POST /api/queue`.
