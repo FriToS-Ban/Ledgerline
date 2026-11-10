@@ -24,9 +24,10 @@ Open http://localhost:3000 (the Command page) and run the Friday demo from the C
 ### Sign-in
 
 - Demo accounts (`clerk@`, `approver@`, `admin@ledgerline.demo`, password `DEMO_PASSWORD`, default `ledgerline`) exist **only when `DEMO_USERS=1`**, in every environment. For local dev add `DEMO_USERS=1` to `.env.local`.
-- Anyone can sign up at `/register`; new accounts are clerks. An admin changes roles on `/account`. To create the first admin, set `BOOTSTRAP_ADMIN_TOKEN` (>= 24 random chars) and send it as `bootstrapToken` when registering; it works only while no real admin exists, so unset it afterwards.
-- `AUTH_SECRET` (>= 32 chars) is required in production. In development a random secret is created in `data/auth.secret`.
-- Sessions live in the database (only a SHA-256 of the session id is stored), expire after 8 hours or 2 idle hours, and are revoked on sign-out. Five failed sign-ins in 15 minutes lock that email (and, with `TRUST_PROXY=1` behind a reverse proxy, that client IP) for 15 minutes.
+- Sign-in is Auth.js (next-auth v5 beta, `src/auth.ts`) with a Credentials provider (email + password, scrypt) and the Drizzle adapter. Credentials sign-in forces JWT sessions, so revocation is a `token_version` on the user: password change and "sign out everywhere" bump it, and every request rejects JWTs carrying an older version. Sessions end 8 hours after sign-in. The JWT carries `userId`, `activeOrgId` and `orgRole`; the active org is re-verified against `memberships` on every request.
+- Anyone can sign up at `/register`; new accounts are clerks with a personal organization (owner membership), or join an organization when registering with a valid `inviteToken`. An admin changes roles on `/account`. To create the first admin, set `BOOTSTRAP_ADMIN_TOKEN` (>= 24 random chars) and send it as `bootstrapToken` when registering; it works only while no real admin exists, so unset it afterwards.
+- `AUTH_SECRET` (>= 32 chars) is required in production. In development a random secret is created in `data/auth.secret`. Behind a reverse proxy or in production set `AUTH_URL` (or `AUTH_TRUST_HOST=1`) so Auth.js trusts the host. Cookies use the `__Host-` prefix in production.
+- Five failed sign-ins in 15 minutes lock that email (and, with `TRUST_PROXY=1` behind a reverse proxy, that client IP) for 15 minutes; the login screen shows the countdown.
 
 ## Demo cases
 

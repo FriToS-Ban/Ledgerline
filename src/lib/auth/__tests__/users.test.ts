@@ -1,6 +1,20 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { verifyPassword } from "../session";
-import { bootstrapTokenAccepted, changeRole, createUser, findUser, listUsers, realAdminCount } from "../users";
+import { verifyPassword } from "../hash";
+import { getDb } from "@/lib/db/client";
+import { invites, memberships } from "@/lib/db/schema";
+import {
+  bootstrapTokenAccepted,
+  bumpTokenVersion,
+  changeRole,
+  createUser,
+  findInvite,
+  findUser,
+  hashInviteToken,
+  listMemberships,
+  listUsers,
+  realAdminCount,
+  setPassword,
+} from "../users";
 import { useTempCwd } from "./helpers";
 
 describe("users, roles and demo accounts", () => {
@@ -70,5 +84,41 @@ describe("users, roles and demo accounts", () => {
     expect(await bootstrapTokenAccepted("a".repeat(31))).toBe(false);
     expect(await bootstrapTokenAccepted("a".repeat(32))).toBe(false); // "second" is a real admin
     await changeRole("second@corp.io", "admin");
+  });
+
+  it("gives a new user a personal organization with an owner membership", async () => {
+    const u = (await createUser({ email: "solo@corp.io", name: "Solo", password: "p-unique-9876", role: "clerk" }))!;
+    const ms = await listMemberships(u.id);
+    expect(ms).toHaveLength(1);
+    expect(ms[0]).toMatchObject({ orgRole: "owner" });
+    expect(ms[0].slug).toMatch(/^personal-/);
+  });
+
+  it("joins the inviting org with the invited role when a valid invite is used, once", async () => {
+    const owner = (await createUser({ email: "own@corp.io", name: "Own", password: "p-unique-9876", role: "clerk" }))!;
+    const [org] = await listMemberships(owner.id);
+    const token = "invite-token-123";
+    await getDb().insert(invites).values({
+      orgId: org.orgId,
+      email: "guest@corp.io",
+      role: "admin",
+      tokenHash: hashInviteToken(token),
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    expect(await findInvite(token, "someone-else@corp.io")).toBeNull(); // wrong email
+    expect(await findInvite("nope", "guest@corp.io")).toBeNull();
+    const invite = (await findInvite(token, "GUEST@corp.io"))!;
+    const g = (await createUser({ email: "guest@corp.io", name: "Guest", password: "p-unique-9876", role: "clerk", invite }))!;
+    expect(await listMemberships(g.id)).toMatchObject([{ orgId: org.orgId, orgRole: "admin" }]);
+    expect(await findInvite(token, "guest@corp.io")).toBeNull(); // consumed
+    expect((await getDb().select().from(memberships)).filter((m) => m.userId === g.id)).toHaveLength(1);
+  });
+
+  it("bumps tokenVersion on password change and sign-out-everywhere", async () => {
+    const u = (await createUser({ email: "ver@corp.io", name: "Ver", password: "p-unique-9876", role: "clerk" }))!;
+    expect(u.tokenVersion).toBe(0);
+    expect(await setPassword("ver@corp.io", "another-pass-4321")).toBe(1);
+    expect(await bumpTokenVersion(u.id)).toBe(2);
+    expect((await findUser("ver@corp.io"))?.tokenVersion).toBe(2);
   });
 });

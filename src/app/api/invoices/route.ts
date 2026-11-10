@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db/client";
 import { seedDatabase } from "@/lib/db/seed";
 import * as t from "@/lib/db/schema";
 import type { PipelineTrace } from "@/lib/invoice/schema";
-import { requireSignedIn } from "@/lib/auth/users";
+import { requireSignedIn } from "@/lib/auth/guard";
 
 export async function GET() {
   const unauth = await requireSignedIn();

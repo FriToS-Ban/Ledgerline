@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { computeAccuracy } from "@/lib/accuracy";
-import { requireSignedIn } from "@/lib/auth/users";
+import { requireSignedIn } from "@/lib/auth/guard";
 
 export async function GET() {
   const unauth = await requireSignedIn();

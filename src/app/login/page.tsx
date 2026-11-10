@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -82,22 +83,30 @@ function AuthCard() {
     setError(null);
     setFields({});
     try {
-      const body =
-        mode === "login"
-          ? { email, password }
-          : { email, name, password, ...(showToken && token ? { bootstrapToken: token } : {}) };
-      const res = await fetch(`/api/auth/${mode}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
+      let data: { error?: string; fields?: Fields; retryAfterSeconds?: number } = {};
+      let ok = false;
+      if (mode === "login") {
+        // Auth.js credentials sign-in. A lockout comes back as code "locked:<seconds>".
+        const r = await signIn("credentials", { email, password, redirect: false });
+        ok = !!r && !r.error;
+        const m = /^locked:(\d+)$/.exec(r?.code ?? "");
+        if (m) data = { retryAfterSeconds: Number(m[1]) };
+        else if (!ok) data = { error: "Email or password is incorrect" };
+      } else {
+        const res = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email, name, password, ...(showToken && token ? { bootstrapToken: token } : {}) }),
+        });
+        ok = res.ok;
+        data = await res.json().catch(() => ({}));
+      }
+      if (ok) {
         router.replace(next);
         router.refresh();
         return;
       }
-      if (res.status === 429 && typeof data.retryAfterSeconds === "number") {
+      if (typeof data.retryAfterSeconds === "number") {
         const n = Date.now();
         setNow(n);
         setLockUntil(n + data.retryAfterSeconds * 1000);

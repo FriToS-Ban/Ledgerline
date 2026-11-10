@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadFridayInbox } from "@/lib/demo/friday";
-import { denyUnless } from "@/lib/auth/users";
+import { denyUnless } from "@/lib/auth/guard";
 
 /** Loads the vendor/PO book and queues ~30 invoices as emails. Processing is left to the worker. */
 export async function POST() {

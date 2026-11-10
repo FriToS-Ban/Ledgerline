@@ -48,9 +48,7 @@ function ChangePassword({ me }: { me: Me }) {
         setCurrent("");
         setNext("");
         toast.success(
-          data.revokedSessions > 0
-            ? `Password changed. ${data.revokedSessions} other session${data.revokedSessions === 1 ? "" : "s"} signed out.`
-            : "Password changed.",
+          "Password changed. Your other sessions were signed out.",
         );
       } else if (res.status === 401) {
         router.replace("/login?next=/account");
@@ -108,11 +106,7 @@ function SignOutEverywhere({ onDone }: { onDone: () => void }) {
   async function go() {
     setBusy(true);
     try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ everywhere: true }),
-      });
+      await fetch("/api/auth/signout-everywhere", { method: "POST" });
     } finally {
       setBusy(false);
       onDone();

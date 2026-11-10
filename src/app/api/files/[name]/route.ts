@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { requireSignedIn } from "@/lib/auth/users";
+import { requireSignedIn } from "@/lib/auth/guard";
 
 const TYPES: Record<string, string> = {
   ".pdf": "application/pdf",

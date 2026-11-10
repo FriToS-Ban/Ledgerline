@@ -3,7 +3,7 @@ import { eq, desc } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { seedDatabase } from "@/lib/db/seed";
 import * as t from "@/lib/db/schema";
-import { requireSignedIn } from "@/lib/auth/users";
+import { requireSignedIn } from "@/lib/auth/guard";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const unauth = await requireSignedIn();

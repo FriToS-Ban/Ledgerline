@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { authSecret, devSecretPath, resetAuthSecretCache, secretsEqual } from "../secret";
-import { authEnabled } from "../session";
+import { authEnabled } from "../roles";
 import { useTempCwd } from "./helpers";
 
 describe("secret and auth configuration", () => {

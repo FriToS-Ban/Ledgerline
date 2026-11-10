@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ingestRawEmail } from "@/lib/email/ingest";
 import { drainQueue } from "@/lib/queue/worker";
-import { requireSignedIn } from "@/lib/auth/users";
+import { requireSignedIn } from "@/lib/auth/guard";
 import { secretsEqual } from "@/lib/auth/secret";
 
 /**

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { passwordProblem } from "./passwords";
-import { MAX_PASSWORD_LENGTH, ROLES } from "./session";
+import { MAX_PASSWORD_LENGTH, passwordProblem } from "./passwords";
+import { ROLES } from "./roles";
 
 const email = z.preprocess(
   (v) => (typeof v === "string" ? v.trim().toLowerCase() : v),
@@ -27,6 +27,8 @@ export const registerSchema = z
     password: z.string({ message: "Choose a password." }),
     /** Optional one-time setup secret (BOOTSTRAP_ADMIN_TOKEN) that makes this account the first admin. */
     bootstrapToken: z.string({ message: "Setup token must be text." }).max(512).optional(),
+    /** Optional invite token: joins the inviting organization instead of creating a personal one. */
+    inviteToken: z.string({ message: "Invite token must be text." }).max(512).optional(),
   })
   .superRefine((v, ctx) => {
     const problem = passwordProblem(v.password, { email: v.email, name: v.name });

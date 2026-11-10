@@ -3,7 +3,8 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import { resumeCase } from "@/lib/process-case";
-import { approvalLimit, getActor } from "@/lib/auth/users";
+import { approvalLimit } from "@/lib/auth/users";
+import { getActor } from "@/lib/auth/guard";
 import type { PipelineTrace } from "@/lib/invoice/schema";
 
 export async function POST(req: NextRequest) {

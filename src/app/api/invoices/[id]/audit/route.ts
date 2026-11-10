@@ -3,7 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import type { PipelineTrace } from "@/lib/invoice/schema";
-import { requireSignedIn } from "@/lib/auth/users";
+import { requireSignedIn } from "@/lib/auth/guard";
 
 const q = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
 

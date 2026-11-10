@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queueStats, retryDead } from "@/lib/queue/jobs";
 import { workerStatus } from "@/lib/queue/worker";
-import { denyUnless, requireSignedIn } from "@/lib/auth/users";
+import { denyUnless, requireSignedIn } from "@/lib/auth/guard";
 
 export async function GET() {
   const unauth = await requireSignedIn();

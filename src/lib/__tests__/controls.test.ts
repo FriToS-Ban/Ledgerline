@@ -2,28 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { createToken, hashPassword, readToken, verifyPassword } from "@/lib/auth/session";
+import { hashPassword, verifyPassword } from "@/lib/auth/hash";
 
-describe("sessions and passwords", () => {
-  it("round-trips a signed session", () => {
-    const t = createToken({ email: "a@b.c", name: "A", role: "approver" });
-    expect(readToken(t)).toMatchObject({ email: "a@b.c", role: "approver" });
-  });
-  it("rejects a tampered role", () => {
-    const t = createToken({ email: "a@b.c", name: "A", role: "clerk" });
-    const [body, sig] = t.split(".");
-    const forged = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(body, "base64url").toString()), role: "admin" })).toString("base64url");
-    expect(readToken(`${forged}.${sig}`)).toBeNull();
-    expect(readToken("garbage")).toBeNull();
-    expect(readToken(undefined)).toBeNull();
-  });
-  it("rejects an expired session", () => {
-    vi.useFakeTimers();
-    const t = createToken({ email: "a@b.c", name: "A", role: "clerk" });
-    vi.setSystemTime(Date.now() + 9 * 60 * 60 * 1000);
-    expect(readToken(t)).toBeNull();
-    vi.useRealTimers();
-  });
+describe("password hashing", () => {
   it("hashes passwords with a salt and verifies them", async () => {
     const h = await hashPassword("s3cret");
     expect(h).not.toContain("s3cret");

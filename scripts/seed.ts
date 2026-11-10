@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { DEMO_USERS } from "../src/lib/auth/demo-users";
-import { hashPassword } from "../src/lib/auth/session";
+import { hashPassword } from "../src/lib/auth/hash";
 import { closeDb, getDb } from "../src/lib/db/client";
 import { seedDatabase } from "../src/lib/db/seed";
 import * as t from "../src/lib/db/schema";

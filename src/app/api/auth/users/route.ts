@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readJson, roleChangeSchema, validationError } from "@/lib/auth/schemas";
-import type { Role } from "@/lib/auth/session";
-import { changeRole, denyUnless, listUsers } from "@/lib/auth/users";
+import type { Role } from "@/lib/auth/roles";
+import { denyUnless } from "@/lib/auth/guard";
+import { changeRole, listUsers } from "@/lib/auth/users";
 
 /** Admin only: every account with its role. */
 export async function GET() {

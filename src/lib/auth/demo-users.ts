@@ -1,4 +1,9 @@
-import type { Role } from "./session";
+import type { Role } from "./roles";
+
+export const DEMO_ORGS = [
+  { name: "Zamp Demo", slug: "zamp-demo" },
+  { name: "Acme Holdings", slug: "acme" },
+] as const;
 
 export const DEMO_DOMAIN = "@ledgerline.demo";
 

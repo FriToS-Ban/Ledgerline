@@ -9,7 +9,7 @@ import { saveUpload } from "@/lib/extract/save-upload";
 import { enqueue } from "@/lib/queue/jobs";
 import { drainQueue } from "@/lib/queue/worker";
 import type { DemoId } from "@/lib/fixtures/cases";
-import { requireSignedIn } from "@/lib/auth/users";
+import { requireSignedIn } from "@/lib/auth/guard";
 
 export async function POST(req: NextRequest) {
   const unauth = await requireSignedIn();

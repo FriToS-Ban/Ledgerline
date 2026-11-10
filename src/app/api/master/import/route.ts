@@ -5,7 +5,7 @@ import { seedDatabase } from "@/lib/db/seed";
 import { importMaster } from "@/lib/master/import";
 import { syncMasterFolder } from "@/lib/master/sync";
 import { erpConfigured, syncFromErp } from "@/lib/master/erp";
-import { denyUnless, requireSignedIn } from "@/lib/auth/users";
+import { denyUnless, requireSignedIn } from "@/lib/auth/guard";
 
 export async function GET() {
   const unauth = await requireSignedIn();

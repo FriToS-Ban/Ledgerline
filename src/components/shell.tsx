@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut, ShieldCheck } from "lucide-react";
+import { signOut as authSignOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
 import { Flyers } from "@/components/scene";
@@ -111,7 +112,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, [path, isLogin, router]);
 
   async function signOut() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await authSignOut({ redirect: false });
     setMe(null);
     router.replace("/login");
     router.refresh();
