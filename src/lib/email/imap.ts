@@ -35,7 +35,7 @@ export async function pollMailbox(orgId: string): Promise<{ fetched: number; ing
         fetched++;
         const result = await ingestRawEmail(orgId, msg.source, "imap");
         if (result.status === "ingested") ingested++;
-        await client.messageFlagsAdd(String(uid), ["\Seen"], { uid: true });
+        await client.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true });
       }
     } finally {
       lock.release();
