@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "build:migrate": "esbuild scripts/migrate-deploy.ts --bundle --platform=node --target=node22 --format=cjs --external:pg-native --outfile=dist/migrate.cjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/migrate.ts",
     "db:seed": "tsx --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/seed.ts"

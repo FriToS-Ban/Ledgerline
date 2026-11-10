@@ -23,6 +23,9 @@ export class S3Storage implements Storage {
     this.client = new S3Client({
       region: env.S3_REGION || "us-east-1",
       endpoint: env.S3_ENDPOINT || undefined,
+      // Skip the SDK's default CRC trailers: many S3-compatible stores (s3mock, older MinIO, some proxies) reject them.
+      requestChecksumCalculation: "WHEN_REQUIRED",
+      responseChecksumValidation: "WHEN_REQUIRED",
       forcePathStyle: truthy(env.S3_FORCE_PATH_STYLE, false),
       credentials:
         env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY

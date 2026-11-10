@@ -18,6 +18,7 @@ import { authEnabled } from "@/lib/auth/roles";
 // (session, csrf, providers, signin, callback, signout, error) plus register and me; password,
 // users and signout-everywhere are NOT listed, so they require a session.
 const OPEN = [
+  /^\/api\/health\/?$/,
   /^\/login(\/|$)/,
   /^\/register(\/|$)/,
   /^\/invite\/[^/]+\/?$/,

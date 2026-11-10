@@ -61,6 +61,7 @@ const framedFileHeaders = [
   { key: "Content-Security-Policy", value: fileCsp },
 ];
 const nextConfig: NextConfig = {
+  output: "standalone",
   cacheComponents: false,
   poweredByHeader: false,
   async headers() {
