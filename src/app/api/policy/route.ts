@@ -3,9 +3,11 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { seedDatabase } from "@/lib/db/seed";
 import * as t from "@/lib/db/schema";
-import { denyUnless } from "@/lib/auth/users";
+import { denyUnless, requireSignedIn } from "@/lib/auth/users";
 
 export async function GET() {
+  const unauth = await requireSignedIn();
+  if (unauth) return unauth;
   await seedDatabase();
   const db = getDb();
   const rows = await db.select().from(t.policyRules);

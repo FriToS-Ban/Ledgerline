@@ -21,6 +21,13 @@ Optional live vision: set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Without a key
 
 Open http://localhost:3000 and click a demo case.
 
+### Sign-in
+
+- Demo accounts (`clerk@`, `approver@`, `admin@ledgerline.demo`, password `DEMO_PASSWORD`, default `ledgerline`) exist **only when `DEMO_USERS=1`**, in every environment. For local dev add `DEMO_USERS=1` to `.env.local`.
+- Anyone can sign up at `/register`; new accounts are clerks. An admin changes roles on `/account`. Set `BOOTSTRAP_ADMIN_EMAIL` to make the first sign-up with that email an admin.
+- `AUTH_SECRET` (>= 32 chars) is required in production. In development a random secret is created in `data/auth.secret`.
+- Sessions live in the database (only a SHA-256 of the session id is stored), expire after 8 hours or 2 idle hours, and are revoked on sign-out. Five failed sign-ins in 15 minutes lock that email and that IP for 15 minutes.
+
 ## Demo cases
 
 1. Split / partial billing against PO-31000

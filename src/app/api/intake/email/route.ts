@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ingestRawEmail } from "@/lib/email/ingest";
 import { drainQueue } from "@/lib/queue/worker";
+import { requireSignedIn } from "@/lib/auth/users";
 
 /**
  * Inbound-email webhook. Accepts either:
@@ -34,6 +35,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
+  const unauth = await requireSignedIn();
+  if (unauth) return unauth;
   const { desc } = await import("drizzle-orm");
   const { getDb, ensureSchema } = await import("@/lib/db/client");
   const t = await import("@/lib/db/schema");

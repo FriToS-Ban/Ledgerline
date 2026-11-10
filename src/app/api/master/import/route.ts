@@ -4,9 +4,11 @@ import { seedDatabase } from "@/lib/db/seed";
 import { importMaster } from "@/lib/master/import";
 import { syncMasterFolder } from "@/lib/master/sync";
 import { erpConfigured, syncFromErp } from "@/lib/master/erp";
-import { denyUnless } from "@/lib/auth/users";
+import { denyUnless, requireSignedIn } from "@/lib/auth/users";
 
 export async function GET() {
+  const unauth = await requireSignedIn();
+  if (unauth) return unauth;
   await seedDatabase();
   const db = rawDbClient();
   const [v, p, l, imports] = await Promise.all([
