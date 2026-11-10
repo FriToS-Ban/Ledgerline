@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readJson } from "@/lib/auth/schemas";
-import { COOKIE, readToken } from "@/lib/auth/session";
+import { COOKIE, readToken, sessionCookieOptions } from "@/lib/auth/session";
 import { resolveSession, revokeSession, revokeUserSessions } from "@/lib/auth/sessions";
 
 /**
@@ -23,6 +23,6 @@ export async function POST(req: NextRequest) {
     }
   }
   const res = NextResponse.json({ ok: true, revokedSessions: revoked });
-  res.cookies.set(COOKIE, "", { path: "/", maxAge: 0 });
+  res.cookies.set(COOKIE, "", sessionCookieOptions(0)); // same flags/path as when set
   return res;
 }

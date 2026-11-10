@@ -27,8 +27,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ name: string }
   if (!/^[A-Za-z0-9-]+\.[a-z0-9]{2,5}$/i.test(name)) return NextResponse.json({ error: "not found" }, { status: 404 });
   const file = path.join(process.cwd(), "public", "uploads", name);
   if (!fs.existsSync(file)) return NextResponse.json({ error: "not found" }, { status: 404 });
-  const type = TYPES[path.extname(name).toLowerCase()] ?? "application/octet-stream";
+  // Allow-list: anything that isn't a PDF or raster image (e.g. .html, .svg) is never served.
+  const type = TYPES[path.extname(name).toLowerCase()];
+  if (!type) return NextResponse.json({ error: "not found" }, { status: 404 });
   return new NextResponse(fs.readFileSync(file), {
-    headers: { "content-type": type, "content-disposition": "inline", "cache-control": "private, max-age=3600" },
+    headers: {
+      "content-type": type,
+      "content-disposition": "inline",
+      "cache-control": "private, max-age=3600",
+      "x-content-type-options": "nosniff",
+    },
   });
 }

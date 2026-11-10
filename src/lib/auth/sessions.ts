@@ -27,7 +27,19 @@ export async function createSession(user: Actor, meta: { ip?: string; userAgent?
           VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
     args: [hashSessionId(sid), user.email, now, now, expiresAt, meta.ip ?? null, meta.userAgent?.slice(0, 300) ?? null],
   });
+  // Opportunistic housekeeping (about 1 in 20 sign-ins), so the table can't grow without bound.
+  if (Math.random() < 0.05) await pruneSessions();
   return { token: createToken({ ...user, sid }, expiresAt), sid, expiresAt };
+}
+
+/** Deletes sessions that ended (expired or revoked) more than a day ago. */
+export async function pruneSessions() {
+  await ensureAuthSchema();
+  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  await rawDbClient().execute({
+    sql: "DELETE FROM auth_sessions WHERE expires_at < ? OR (revoked_at IS NOT NULL AND revoked_at < ?)",
+    args: [dayAgo, dayAgo],
+  });
 }
 
 /**
@@ -74,11 +86,6 @@ export async function revokeUserSessions(email: string, exceptSid?: string): Pro
   const r = await rawDbClient().execute({
     sql: `UPDATE auth_sessions SET revoked_at = ? WHERE email = ? AND revoked_at IS NULL AND id_hash != ?`,
     args: [Date.now(), email, exceptSid ? hashSessionId(exceptSid) : ""],
-  });
-  // Housekeeping: forget sessions that ended more than a day ago.
-  await rawDbClient().execute({
-    sql: "DELETE FROM auth_sessions WHERE expires_at < ?",
-    args: [Date.now() - 24 * 60 * 60 * 1000],
   });
   return r.rowsAffected;
 }

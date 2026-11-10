@@ -36,12 +36,14 @@ async function migrate() {
       user_agent TEXT
     );
     CREATE INDEX IF NOT EXISTS auth_sessions_email ON auth_sessions (email);
+    CREATE INDEX IF NOT EXISTS auth_sessions_expires ON auth_sessions (expires_at);
     CREATE TABLE IF NOT EXISTS auth_throttle (
       key TEXT PRIMARY KEY,
       failures INTEGER NOT NULL,
       first_at INTEGER NOT NULL,
       locked_until INTEGER
     );
+    CREATE INDEX IF NOT EXISTS auth_throttle_first_at ON auth_throttle (first_at);
   `);
   for (const col of ["created_at INTEGER", "password_changed_at INTEGER"]) {
     try {

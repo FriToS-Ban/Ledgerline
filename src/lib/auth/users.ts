@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { dbConfig, rawDbClient } from "@/lib/db/client";
@@ -34,7 +35,7 @@ export async function ensureUsers() {
     if (exists) continue;
     await db.execute({
       sql: "INSERT OR IGNORE INTO users (email,name,role,password_hash,created_at) VALUES (?,?,?,?,?)",
-      args: [u.email, u.name, u.role, hashPassword(pw), Date.now()],
+      args: [u.email, u.name, u.role, await hashPassword(pw), Date.now()],
     });
   }
   seeded.add(key);
@@ -58,25 +59,44 @@ export async function createUser(u: { email: string; name: string; password: str
   const email = normalizeEmail(u.email);
   const r = await rawDbClient().execute({
     sql: "INSERT OR IGNORE INTO users (email,name,role,password_hash,created_at,password_changed_at) VALUES (?,?,?,?,?,?)",
-    args: [email, u.name, u.role, hashPassword(u.password), Date.now(), Date.now()],
+    args: [email, u.name, u.role, await hashPassword(u.password), Date.now(), Date.now()],
   });
   return r.rowsAffected === 1 ? { email, name: u.name, role: u.role } : null;
 }
 
-/** Role for a self-registered account: clerk, or admin for BOOTSTRAP_ADMIN_EMAIL while no admin exists. */
-export async function roleForNewUser(email: string): Promise<Role> {
-  const boot = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
-  if (!boot || normalizeEmail(email) !== boot) return "clerk";
+/**
+ * SQL condition for admins who can actually sign in. Demo rows stay in the table after
+ * DEMO_USERS is switched off, so they must not count then. `includeDemo: false` never counts them.
+ */
+function usableAdminSql(includeDemo = demoUsersEnabled()) {
+  return includeDemo ? "role = 'admin'" : `role = 'admin' AND email NOT LIKE '%${DEMO_DOMAIN}'`;
+}
+
+/** Admins that are not demo accounts. */
+export async function realAdminCount(): Promise<number> {
   await ensureUsers();
-  const admins = Number((await rawDbClient().execute("SELECT COUNT(*) c FROM users WHERE role = 'admin'")).rows[0].c);
-  return admins === 0 ? "admin" : "clerk";
+  return Number((await rawDbClient().execute(`SELECT COUNT(*) c FROM users WHERE ${usableAdminSql(false)}`)).rows[0].c);
+}
+
+export const MIN_BOOTSTRAP_TOKEN_LENGTH = 24;
+
+/**
+ * True when `token` equals BOOTSTRAP_ADMIN_TOKEN (constant-time, over sha256 digests so lengths
+ * never leak) AND no real (non-demo) admin exists yet. Tokens shorter than 24 chars are ignored.
+ */
+export async function bootstrapTokenAccepted(token: string): Promise<boolean> {
+  const expected = process.env.BOOTSTRAP_ADMIN_TOKEN?.trim() ?? "";
+  const digest = (v: string) => createHash("sha256").update(v).digest();
+  const match = timingSafeEqual(digest(token), digest(expected));
+  if (!match || expected.length < MIN_BOOTSTRAP_TOKEN_LENGTH) return false;
+  return (await realAdminCount()) === 0;
 }
 
 export async function setPassword(email: string, password: string) {
   await ensureAuthSchema();
   await rawDbClient().execute({
     sql: "UPDATE users SET password_hash = ?, password_changed_at = ? WHERE email = ?",
-    args: [hashPassword(password), Date.now(), normalizeEmail(email)],
+    args: [await hashPassword(password), Date.now(), normalizeEmail(email)],
   });
 }
 
@@ -112,7 +132,7 @@ export async function changeRole(email: string, role: Role): Promise<RoleChange>
   const r = await db.execute({
     sql: `UPDATE users SET role = ?
           WHERE email = ?
-            AND (role != 'admin' OR ? = 'admin' OR (SELECT COUNT(*) FROM users WHERE role = 'admin') > 1)`,
+            AND (role != 'admin' OR ? = 'admin' OR (SELECT COUNT(*) FROM users WHERE ${usableAdminSql()}) > 1)`,
     args: [role, e, role],
   });
   if (r.rowsAffected !== 1) return { ok: false, status: 409, error: "Cannot remove the last admin. Make someone else an admin first." };

@@ -2,20 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { ingestRawEmail } from "@/lib/email/ingest";
 import { drainQueue } from "@/lib/queue/worker";
 import { requireSignedIn } from "@/lib/auth/users";
+import { secretsEqual } from "@/lib/auth/secret";
 
 /**
  * Inbound-email webhook. Accepts either:
  *  - a raw RFC822 body (Content-Type: message/rfc822), or
  *  - multipart/form-data with an `email` field holding the raw message
  *    (SendGrid Inbound Parse "send raw" / Mailgun `message-mime`).
- * Protect with INTAKE_SECRET via `x-intake-secret` header or `?secret=`.
+ * Fails closed: with INTAKE_SECRET unset the webhook is disabled (503). The secret goes in the
+ * `x-intake-secret` header (constant-time compare). `?secret=` (leaks into URLs and access logs)
+ * is accepted only with INTAKE_QUERY_SECRET=1, for providers that can't send headers.
  */
 export async function POST(req: NextRequest) {
-  const secret = process.env.INTAKE_SECRET;
-  if (secret) {
-    const given = req.headers.get("x-intake-secret") ?? req.nextUrl.searchParams.get("secret");
-    if (given !== secret) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const secret = process.env.INTAKE_SECRET?.trim();
+  if (!secret) {
+    return NextResponse.json({ error: "email intake webhook is disabled: set INTAKE_SECRET" }, { status: 503 });
   }
+  const given =
+    req.headers.get("x-intake-secret") ??
+    (process.env.INTAKE_QUERY_SECRET === "1" ? req.nextUrl.searchParams.get("secret") : null);
+  if (!secretsEqual(given, secret)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const ct = req.headers.get("content-type") ?? "";
   let raw: Uint8Array | null = null;
   if (ct.includes("multipart/form-data")) {

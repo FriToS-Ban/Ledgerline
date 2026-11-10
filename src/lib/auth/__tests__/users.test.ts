@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { verifyPassword } from "../session";
-import { changeRole, createUser, findUser, listUsers, roleForNewUser } from "../users";
+import { bootstrapTokenAccepted, changeRole, createUser, findUser, listUsers, realAdminCount } from "../users";
 import { useTempCwd } from "./helpers";
 
 describe("users, roles and demo accounts", () => {
   useTempCwd("auth-users-");
   afterEach(() => {
     delete process.env.DEMO_USERS;
-    delete process.env.BOOTSTRAP_ADMIN_EMAIL;
+    delete process.env.BOOTSTRAP_ADMIN_TOKEN;
   });
 
   it("never demotes the last admin", async () => {
@@ -34,7 +34,7 @@ describe("users, roles and demo accounts", () => {
     expect(await createUser({ email: "dup@corp.io", name: "D2", password: "other-pass-xyz", role: "clerk" })).toBeNull();
     const u = await findUser("DUP@corp.io");
     expect(u?.hash).not.toContain("first-pass-xyz");
-    expect(verifyPassword("first-pass-xyz", u!.hash)).toBe(true);
+    expect(await verifyPassword("first-pass-xyz", u!.hash)).toBe(true);
   });
 
   it("only seeds and admits demo accounts with DEMO_USERS=1", async () => {
@@ -48,10 +48,27 @@ describe("users, roles and demo accounts", () => {
     expect((await listUsers()).some((u) => u.email.endsWith("@ledgerline.demo"))).toBe(false);
   });
 
-  it("makes BOOTSTRAP_ADMIN_EMAIL an admin only while no admin exists", async () => {
-    process.env.BOOTSTRAP_ADMIN_EMAIL = "Founder@Corp.io";
-    expect(await roleForNewUser("someone@corp.io")).toBe("clerk");
-    // admins already exist in this db from earlier tests
-    expect(await roleForNewUser("founder@corp.io")).toBe("clerk");
+  it("does not count hidden demo admins when protecting the last admin", async () => {
+    process.env.DEMO_USERS = "1";
+    expect((await findUser("admin@ledgerline.demo"))?.role).toBe("admin"); // seeded
+    // demote every real admin but one
+    for (const u of await listUsers()) {
+      if (u.role === "admin" && !u.email.endsWith("@ledgerline.demo") && u.email !== "second@corp.io") {
+        await changeRole(u.email, "clerk");
+      }
+    }
+    delete process.env.DEMO_USERS;
+    expect(await realAdminCount()).toBe(1);
+    // the demo admin row still exists, but can't sign in: "second" is the last usable admin
+    expect(await changeRole("second@corp.io", "clerk")).toMatchObject({ ok: false, status: 409 });
+  });
+
+  it("bootstrap token: constant-time match, min length, and only while no real admin exists", async () => {
+    process.env.BOOTSTRAP_ADMIN_TOKEN = "short";
+    expect(await bootstrapTokenAccepted("short")).toBe(false); // too short to honour
+    process.env.BOOTSTRAP_ADMIN_TOKEN = "a".repeat(32);
+    expect(await bootstrapTokenAccepted("a".repeat(31))).toBe(false);
+    expect(await bootstrapTokenAccepted("a".repeat(32))).toBe(false); // "second" is a real admin
+    await changeRole("second@corp.io", "admin");
   });
 });

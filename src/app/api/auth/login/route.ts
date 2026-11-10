@@ -1,18 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { clearFailures, clientIp, lockedFor, lockoutMessage, recordFailure, throttleKeys } from "@/lib/auth/rate-limit";
+import { attemptFailed, attemptSucceeded, clientIp, lockoutResponse, reserveAttempt, throttleKeys } from "@/lib/auth/rate-limit";
 import { loginSchema, readJson, validationError } from "@/lib/auth/schemas";
-import { COOKIE, dummyPasswordHash, sessionCookieOptions, verifyPassword } from "@/lib/auth/session";
-import { createSession } from "@/lib/auth/sessions";
+import { COOKIE, dummyPasswordHash, readToken, sessionCookieOptions, verifyPassword } from "@/lib/auth/session";
+import { createSession, revokeSession } from "@/lib/auth/sessions";
 import { findUser, normalizeEmail } from "@/lib/auth/users";
 
 const INVALID = "Email or password is incorrect";
-
-function locked(seconds: number) {
-  return NextResponse.json(
-    { error: lockoutMessage(seconds), retryAfterSeconds: seconds },
-    { status: 429, headers: { "retry-after": String(seconds) } },
-  );
-}
 
 export async function POST(req: NextRequest) {
   const parsed = loginSchema.safeParse(await readJson(req));
@@ -20,22 +13,26 @@ export async function POST(req: NextRequest) {
   const email = normalizeEmail(parsed.data.email);
   const { password } = parsed.data;
   const ip = clientIp(req.headers);
-  const keys = throttleKeys("login", email, ip);
+  const emailKey = `login:email:${email}`;
 
-  const wait = await lockedFor(keys);
-  if (wait) return locked(wait);
+  // Count the attempt BEFORE checking the password, atomically, so parallel guesses can't race past the limit.
+  const reservation = await reserveAttempt(throttleKeys("login", email, ip));
+  if (!reservation.ok) return lockoutResponse(reservation.retryAfterSeconds);
 
   const user = await findUser(email);
   // Always run scrypt once, so an unknown email takes as long as a wrong password.
-  const ok = verifyPassword(password, user?.hash ?? dummyPasswordHash()) && !!user;
+  const ok = (await verifyPassword(password, user?.hash ?? (await dummyPasswordHash()))) && !!user;
   if (!ok || !user) {
-    const lockedNow = await recordFailure(keys);
-    if (lockedNow) return locked(lockedNow);
+    const lockedNow = await attemptFailed(reservation);
+    if (lockedNow) return lockoutResponse(lockedNow);
     return NextResponse.json({ error: INVALID }, { status: 401 });
   }
 
-  await clearFailures(keys.slice(0, 1)); // the email key; the IP key decays on its own
-  const { token } = await createSession(user, { ip, userAgent: req.headers.get("user-agent") ?? undefined });
+  await attemptSucceeded(reservation, [emailKey]);
+  // Signing in again replaces (revokes) whatever session this browser had.
+  const previous = readToken(req.cookies.get(COOKIE)?.value)?.sid;
+  if (previous) await revokeSession(previous);
+  const { token } = await createSession(user, { ip: ip ?? undefined, userAgent: req.headers.get("user-agent") ?? undefined });
   const res = NextResponse.json({ user: { email: user.email, name: user.name, role: user.role } });
   res.cookies.set(COOKIE, token, sessionCookieOptions());
   return res;

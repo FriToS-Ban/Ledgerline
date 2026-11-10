@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 let cached: string | null = null;
 
@@ -24,8 +24,9 @@ export function authSecret(): string {
   }
   if (process.env.NODE_ENV === "production") throw new Error("AUTH_SECRET must be set in production");
   const file = devSecretPath();
+  let existing: string | null = null;
   try {
-    const existing = fs.readFileSync(file, "utf8").trim();
+    existing = fs.readFileSync(file, "utf8").trim();
     if (existing.length >= 32) return (cached = existing);
   } catch {
     /* not created yet */
@@ -33,12 +34,21 @@ export function authSecret(): string {
   const fresh = randomBytes(32).toString("hex");
   fs.mkdirSync(path.dirname(file), { recursive: true });
   try {
-    // "wx" so two processes racing on first start don't clobber each other.
-    fs.writeFileSync(file, fresh, { mode: 0o600, flag: "wx" });
+    // A file that exists but is too short (truncated / hand-edited) is replaced ("w").
+    // A missing file is created with "wx" so two processes racing on first start don't clobber each other.
+    fs.writeFileSync(file, fresh, { mode: 0o600, flag: existing === null ? "wx" : "w" });
     return (cached = fresh);
   } catch {
-    return (cached = fs.readFileSync(file, "utf8").trim());
+    const raced = fs.readFileSync(file, "utf8").trim();
+    if (raced.length < 32) throw new Error(`${file} holds a secret shorter than 32 characters; delete it and restart`);
+    return (cached = raced);
   }
+}
+
+/** Constant-time string comparison (over sha256 digests, so differing lengths leak nothing). */
+export function secretsEqual(given: string | null | undefined, expected: string): boolean {
+  const d = (v: string) => createHash("sha256").update(v).digest();
+  return timingSafeEqual(d(given ?? ""), d(expected)) && given != null && expected.length > 0;
 }
 
 /** Test hook: forget the cached secret. */

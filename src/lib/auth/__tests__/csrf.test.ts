@@ -4,7 +4,10 @@ import { csrfProblem } from "../csrf";
 const h = (o: Record<string, string>) => new Headers({ host: "app.example.com", ...o });
 
 describe("CSRF origin check", () => {
-  afterEach(() => delete process.env.APP_ORIGINS);
+  afterEach(() => {
+    delete process.env.APP_ORIGINS;
+    delete process.env.TRUST_PROXY;
+  });
 
   it("lets safe methods through regardless of origin", () => {
     expect(csrfProblem("GET", "/api/invoices", h({ origin: "https://evil.example" }))).toBeNull();
@@ -26,10 +29,22 @@ describe("CSRF origin check", () => {
     expect(csrfProblem("POST", "/api/policy", h({}))).toBeNull();
   });
 
-  it("honours x-forwarded-host and APP_ORIGINS", () => {
-    expect(csrfProblem("POST", "/api/x", h({ "x-forwarded-host": "public.example.com", origin: "https://public.example.com" }))).toBeNull();
+  it("trusts x-forwarded-host/-proto only with TRUST_PROXY=1", () => {
+    const fwd = h({ "x-forwarded-host": "public.example.com", "x-forwarded-proto": "https", origin: "https://public.example.com" });
+    expect(csrfProblem("POST", "/api/x", fwd)).toMatch(/blocked/);
+    process.env.TRUST_PROXY = "1";
+    expect(csrfProblem("POST", "/api/x", fwd)).toBeNull();
+    // scheme must match the forwarded proto
+    expect(
+      csrfProblem("POST", "/api/x", h({ "x-forwarded-host": "public.example.com", "x-forwarded-proto": "https", origin: "http://public.example.com" })),
+    ).toMatch(/blocked/);
+  });
+
+  it("matches APP_ORIGINS on the full origin (scheme, host, port)", () => {
     process.env.APP_ORIGINS = "https://admin.example.com";
     expect(csrfProblem("POST", "/api/x", h({ origin: "https://admin.example.com" }))).toBeNull();
+    expect(csrfProblem("POST", "/api/x", h({ origin: "http://admin.example.com" }))).toMatch(/blocked/);
+    expect(csrfProblem("POST", "/api/x", h({ origin: "https://admin.example.com:8443" }))).toMatch(/blocked/);
   });
 
   it("exempts the webhook routes that carry their own secret", () => {

@@ -1,4 +1,5 @@
-import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 import { authSecret } from "./secret";
 
 export type Role = "clerk" | "approver" | "admin";
@@ -8,32 +9,44 @@ export const isRole = (v: unknown): v is Role => typeof v === "string" && (ROLES
 /** What the signed cookie carries. `sid` is the random session id; the DB stores only its sha256. */
 export type Session = { sid?: string; email: string; name: string; role: Role; exp: number };
 
-export const COOKIE = "ledgerline_session";
+/**
+ * In production the cookie uses the __Host- prefix: the browser then insists on Secure, Path=/ and
+ * no Domain, so a sibling subdomain can't set or shadow it.
+ */
+export const COOKIE = process.env.NODE_ENV === "production" ? "__Host-ledgerline_session" : "ledgerline_session";
 /** Absolute lifetime of a session, from sign-in. */
 export const ABSOLUTE_TTL_MS = 8 * 60 * 60 * 1000;
 /** Idle timeout: a session unused for this long is dead (sliding window, tracked in the DB). */
 export const IDLE_TTL_MS = 2 * 60 * 60 * 1000;
 
-export const authEnabled = () => (process.env.AUTH_DISABLED === "1" ? false : true);
+/** AUTH_DISABLED=1 turns sign-in off (everyone is admin). Refused outright in production. */
+export function authEnabled() {
+  if (process.env.AUTH_DISABLED !== "1") return true;
+  if (process.env.NODE_ENV === "production") throw new Error("AUTH_DISABLED=1 is not allowed in production");
+  return false;
+}
 
 export { MAX_PASSWORD_LENGTH } from "./passwords";
 
-export function hashPassword(pw: string) {
+// Async scrypt runs on the libuv threadpool, so password hashing never blocks the event loop.
+const scryptAsync = promisify(scrypt) as (pw: string, salt: string, keylen: number) => Promise<Buffer>;
+
+export async function hashPassword(pw: string): Promise<string> {
   const salt = randomBytes(16).toString("hex");
-  return `${salt}:${scryptSync(pw, salt, 32).toString("hex")}`;
+  return `${salt}:${(await scryptAsync(pw, salt, 32)).toString("hex")}`;
 }
 
-export function verifyPassword(pw: string, stored: string) {
+export async function verifyPassword(pw: string, stored: string): Promise<boolean> {
   const [salt, hash] = stored.split(":");
   if (!salt || !hash) return false;
   const a = Buffer.from(hash, "hex");
-  const b = scryptSync(pw, salt, 32);
+  const b = await scryptAsync(pw, salt, 32);
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-let dummy: string | null = null;
+let dummy: Promise<string> | null = null;
 /** A real hash of nothing in particular, so an unknown email costs the same scrypt work as a wrong password. */
-export function dummyPasswordHash() {
+export function dummyPasswordHash(): Promise<string> {
   return (dummy ??= hashPassword(randomBytes(16).toString("hex")));
 }
 

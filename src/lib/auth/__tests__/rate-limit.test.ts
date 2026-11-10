@@ -1,10 +1,25 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearFailures, clientIp, LOCK_MS, lockedFor, recordFailure, throttleKeys, WINDOW_MS } from "../rate-limit";
+import {
+  attemptFailed,
+  attemptSucceeded,
+  clientIp,
+  LOCK_MS,
+  lockedFor,
+  MAX_FAILURES,
+  recordFailure,
+  reserveAttempt,
+  throttleKeys,
+  WINDOW_MS,
+} from "../rate-limit";
 import { freezeClock, useTempCwd } from "./helpers";
 
 describe("login rate limit and lockout", () => {
   useTempCwd("auth-rl-");
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    delete process.env.TRUST_PROXY;
+    delete process.env.TRUSTED_PROXY_HOPS;
+  });
 
   it("locks an email after 5 failures in 15 minutes, for 15 minutes", async () => {
     const clock = freezeClock();
@@ -14,6 +29,7 @@ describe("login rate limit and lockout", () => {
     expect(await lockedFor(keys)).toBe(0);
     expect(await recordFailure(keys)).toBe(LOCK_MS / 1000);
     expect(await lockedFor(keys)).toBe(900);
+    expect(await reserveAttempt(keys)).toEqual({ ok: false, retryAfterSeconds: 900 });
 
     clock.advance(10 * 60 * 1000);
     expect(await lockedFor(keys)).toBe(300);
@@ -23,15 +39,26 @@ describe("login rate limit and lockout", () => {
     expect(await recordFailure(keys)).toBe(0);
   });
 
+  it("refuses all but MAX_FAILURES of 20 concurrent attempts (no check-then-act race)", async () => {
+    freezeClock();
+    const keys = throttleKeys("login", "burst@x.io", null);
+    const results = await Promise.all(Array.from({ length: 20 }, () => reserveAttempt(keys)));
+    expect(results.filter((r) => r.ok)).toHaveLength(MAX_FAILURES);
+    expect(results.filter((r) => !r.ok)).toHaveLength(20 - MAX_FAILURES);
+    expect(await lockedFor(keys)).toBeGreaterThan(0);
+  });
+
   it("locks by IP across different emails", async () => {
     freezeClock();
     const ip = "10.0.0.2";
     for (let i = 0; i < 4; i++) expect(await recordFailure(throttleKeys("login", `user${i}@x.io`, ip))).toBe(0);
     expect(await recordFailure(throttleKeys("login", "user9@x.io", ip))).toBeGreaterThan(0);
-    // a brand-new email from the same IP is blocked too
     expect(await lockedFor(throttleKeys("login", "someone-else@x.io", ip))).toBeGreaterThan(0);
-    // but that email from another IP is fine
     expect(await lockedFor(throttleKeys("login", "someone-else@x.io", "10.0.0.3"))).toBe(0);
+  });
+
+  it("uses only the email key when the IP is not trusted", () => {
+    expect(throttleKeys("login", "a@x.io", null)).toEqual(["login:email:a@x.io"]);
   });
 
   it("forgets failures older than the window", async () => {
@@ -43,18 +70,26 @@ describe("login rate limit and lockout", () => {
     expect(await lockedFor(keys)).toBe(0);
   });
 
-  it("clears an email's failures after a successful sign-in", async () => {
+  it("success clears the email key and refunds the IP key", async () => {
     freezeClock();
     const keys = throttleKeys("login", "ok@x.io", "10.0.0.5");
     for (let i = 0; i < 4; i++) await recordFailure(keys);
-    await clearFailures(keys.slice(0, 1));
-    // email budget is fresh; only the IP key (now at 4) would lock on the next failure
+    const r = await reserveAttempt(keys); // 5th attempt, then it succeeds
+    expect(r.ok).toBe(true);
+    await attemptSucceeded(r, [keys[0]]);
+    // email budget is fresh; IP is back to 4, so one more failure from that IP locks it
     expect(await recordFailure([keys[0]])).toBe(0);
+    expect(await attemptFailed(await reserveAttempt([keys[1]]))).toBeGreaterThan(0);
   });
 
-  it("reads the client IP from proxy headers", () => {
-    expect(clientIp(new Headers({ "x-forwarded-for": "1.2.3.4, 5.6.7.8" }))).toBe("1.2.3.4");
-    expect(clientIp(new Headers({ "x-real-ip": "9.9.9.9" }))).toBe("9.9.9.9");
-    expect(clientIp(new Headers())).toBe("unknown");
+  it("trusts forwarding headers only with TRUST_PROXY=1, reading from the right", () => {
+    const h = new Headers({ "x-forwarded-for": "6.6.6.6, 1.2.3.4" });
+    expect(clientIp(h)).toBeNull();
+    process.env.TRUST_PROXY = "1";
+    expect(clientIp(h)).toBe("1.2.3.4"); // the entry our proxy appended, not the spoofable left one
+    process.env.TRUSTED_PROXY_HOPS = "2";
+    expect(clientIp(h)).toBe("6.6.6.6");
+    expect(clientIp(new Headers({ "x-real-ip": "9.9.9.9", "x-forwarded-for": "1.1.1.1" }))).toBe("9.9.9.9");
+    expect(clientIp(new Headers())).toBeNull();
   });
 });

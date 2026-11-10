@@ -38,10 +38,33 @@ const securityHeaders = [
   ...(isDev ? [] : [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }]),
 ];
 
-/** Invoice files are shown in an <iframe> on the case page, so they may be framed by this origin only. */
-const sameOriginFraming = [
+/**
+ * Invoice files (PDF/images) are shown in an <iframe> on the case page, so this origin may frame
+ * them. Their CSP is the base policy made STRICTER: no scripts, no connections, no forms, so even
+ * a stray HTML/SVG file could not run anything. `object-src 'self'` keeps the browser PDF viewer
+ * working (it is a plugin embed); `sandbox` is NOT used here because Chrome refuses to render
+ * PDFs in sandboxed documents. Served types are also allow-listed in /api/files and save-upload.
+ */
+const fileCsp = [
+  "default-src 'none'",
+  "img-src 'self' data: blob:",
+  "style-src 'unsafe-inline'",
+  "object-src 'self'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-ancestors 'self'",
+].join("; ");
+const framedFileHeaders = [
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
-  { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+  { key: "Content-Security-Policy", value: fileCsp },
+];
+/**
+ * public/uploads is never framed (the app links uploads through /api/files). Anything requested
+ * there directly is sandboxed (no script, no same-origin) and downloaded, never rendered.
+ */
+const uploadHeaders = [
+  { key: "Content-Security-Policy", value: `${csp}; sandbox` },
+  { key: "Content-Disposition", value: "attachment" },
 ];
 
 const nextConfig: NextConfig = {
@@ -51,9 +74,9 @@ const nextConfig: NextConfig = {
     return [
       { source: "/:path*", headers: securityHeaders },
       // Later entries override earlier ones for the same key.
-      { source: "/api/files/:path*", headers: sameOriginFraming },
-      { source: "/demos/:path*", headers: sameOriginFraming },
-      { source: "/uploads/:path*", headers: sameOriginFraming },
+      { source: "/api/files/:path*", headers: framedFileHeaders },
+      { source: "/demos/:path*", headers: framedFileHeaders },
+      { source: "/uploads/:path*", headers: uploadHeaders },
     ];
   },
   serverExternalPackages: [
