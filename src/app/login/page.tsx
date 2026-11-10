@@ -31,6 +31,7 @@ function AuthCard() {
   const router = useRouter();
   const params = useSearchParams();
   const next = safeNext(params.get("next"));
+  const invite = params.get("invite") ?? "";
   const [mode, setMode] = useState<Mode>(params.get("mode") === "register" ? "register" : "login");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -38,6 +39,7 @@ function AuthCard() {
   const [token, setToken] = useState("");
   const [showToken, setShowToken] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [invitedTo, setInvitedTo] = useState<string | null>(null);
   const [fields, setFields] = useState<Fields>({});
   const [busy, setBusy] = useState(false);
   const [demo, setDemo] = useState(false);
@@ -55,6 +57,19 @@ function AuthCard() {
       })
       .catch(() => {});
   }, [router, next]);
+
+  // an invite link: show where it leads and prefill the invited address
+  useEffect(() => {
+    if (!invite) return;
+    void fetch(`/api/invites/preview?token=${encodeURIComponent(invite)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        setInvitedTo(d.invite.orgName);
+        setEmail((cur) => cur || d.invite.email);
+      })
+      .catch(() => {});
+  }, [invite]);
 
   useEffect(() => {
     if (!lockUntil) return;
@@ -96,7 +111,7 @@ function AuthCard() {
         const res = await fetch("/api/auth/register", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ email, name, password, ...(showToken && token ? { bootstrapToken: token } : {}) }),
+          body: JSON.stringify({ email, name, password, ...(showToken && token ? { bootstrapToken: token } : {}), ...(invite ? { inviteToken: invite } : {}) }),
         });
         ok = res.ok;
         data = await res.json().catch(() => ({}));
@@ -151,6 +166,12 @@ function AuthCard() {
         <p className="mt-1 text-sm text-text-mute">
           {register ? "New accounts start as a clerk. An admin can change your role." : "Your role sets how much you can approve."}
         </p>
+
+        {invitedTo && (
+          <p className="mt-3 rounded-lg border border-neon-blue/40 bg-neon-blue/10 px-3 py-2 text-sm">
+            {register ? "Create an account" : "Sign in"} to join <strong>{invitedTo}</strong>.
+          </p>
+        )}
 
         <form onSubmit={submit} className="mt-6 space-y-5" aria-busy={busy}>
           {register && (

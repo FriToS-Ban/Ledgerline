@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
 import { Flyers } from "@/components/scene";
 import { safeNext } from "@/lib/auth/safe-next";
+import { OrgSwitcher } from "@/components/org-switcher";
 
 const NAV = [
   { href: "/", label: "Command" },
@@ -95,7 +96,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const [me, setMe] = useState<Me>(null);
-  const isLogin = path === "/login";
+  // pages that render their own chrome and must work signed out
+  const isLogin = path === "/login" || path.startsWith("/invite/");
 
   useEffect(() => {
     if (isLogin) return;
@@ -156,6 +158,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <div className="order-2 ml-auto flex items-center gap-2 text-sm xl:order-3 xl:ml-0">
             {me && (
               <>
+                {!me.email.startsWith("auth-disabled") && <OrgSwitcher key={me.email} />}
                 <span className="hidden max-w-[14rem] truncate text-text-mute sm:inline xl:sr-only" title={me.email}>
                   {me.name}
                 </span>
