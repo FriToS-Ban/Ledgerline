@@ -45,3 +45,11 @@ yarn-error.log*
 next-env.d.ts
 
 /dist/
+
+# local AI tooling / agent files
+/AGENTS.md
+/CLAUDE.md
+/.claude/
+/.superpowers/
+/docs/superpowers/
+/design-system/
