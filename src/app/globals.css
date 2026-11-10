@@ -35,6 +35,7 @@
   --glow-blue: 0 0 0 1px rgba(59, 130, 246, 0.35), 0 0 24px rgba(59, 130, 246, 0.28);
   --glow-violet: 0 0 0 1px rgba(139, 92, 246, 0.35), 0 0 24px rgba(139, 92, 246, 0.28);
   --glow-cyan: 0 0 0 1px rgba(34, 211, 238, 0.35), 0 0 20px rgba(34, 211, 238, 0.25);
+  --shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.35);
   --gradient-neon: linear-gradient(135deg, var(--neon-blue), var(--neon-violet));
 
   /* legacy aliases */
@@ -218,7 +219,7 @@ button:disabled { cursor: not-allowed; }
   border-radius: var(--radius);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-panel);
   overflow-x: auto;
 }
 .ledger table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }

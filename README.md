@@ -1,6 +1,6 @@
-# Ledgerline — invoice decision workbench
+# Ledgerline — the payment guard
 
-Takes a vendor PDF and produces a defendable AP decision: extract → normalize (tax, shipping, FX) → match remaining PO balance (including multi-PO) → policy rules → recommendation with a full audit trail.
+Catch duplicate, overpaid and suspicious invoices before money leaves. Every invoice (vendor PDF, photo or email attachment) is read, normalized (tax, shipping, FX), matched against the remaining PO balance (including multi-PO), checked against your guard rules, and given a release / hold / block call with a full audit trail.
 
 ## Run
 
@@ -19,7 +19,7 @@ npm run dev:inngest
 
 Optional live vision: set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Without a key, seeded fixtures and digital PDF parse still run; scanned pages fall back to Tesseract.
 
-Open http://localhost:3000 and click a demo case.
+Open http://localhost:3000 (the Command page) and run the Friday demo or a known threat.
 
 ### Sign-in
 

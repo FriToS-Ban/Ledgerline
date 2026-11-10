@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/status-badge";
 
@@ -38,7 +39,7 @@ type Row = {
 const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-export default function Friday() {
+export default function CommandPage() {
   const router = useRouter();
   const [m, setM] = useState<Metrics | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
@@ -88,55 +89,57 @@ export default function Friday() {
   const queueDone = m.queue.done ?? 0;
   const maxReason = Math.max(1, ...m.reasons.map((r) => r.count));
 
+  const stopped = m.money.held + m.money.blocked;
+  const stats = [
+    { label: "Overpayments prevented", value: usd(stopped), note: `${usd(m.money.held)} held, ${usd(m.money.blocked)} blocked`, tone: "text-danger-text" },
+    { label: "Duplicates caught", value: String(m.duplicatesCaught), note: m.duplicatesCaught === 0 ? "No re-sent invoices so far" : "Re-sent invoices stopped before payment", tone: "text-warning-text" },
+    { label: "Held for review", value: String(m.waitingForPerson), note: m.waitingForPerson === 0 ? "Nobody is waiting" : "Waiting for a person to look", tone: "text-blue-text" },
+  ];
+  const linkBase =
+    "inline-flex min-h-11 items-center rounded-md border px-5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-neon-cyan";
+
   return (
     <div className="space-y-12">
-      <section className="grid items-end gap-8 lg:grid-cols-[minmax(0,1fr)_17rem]">
-        <div>
-          <h1 className="font-display max-w-[20ch] text-[2.6rem] leading-[1.1] sm:text-[3.4rem]">
-            {m.total === 0 ? "Nothing has come in yet." : `${plural(m.total, "invoice", "invoices")} came in.`}
-          </h1>
-          {m.total > 0 && (
-            <p className="font-display mt-5 max-w-[36ch] text-[1.4rem] leading-snug text-[#1F2A44] sm:text-[1.65rem]">
-              {cleared === 0 ? "None are cleared to pay yet." : `${cleared} ${cleared === 1 ? "is" : "are"} cleared to pay, ${usd(m.money.cleared)} in all.`}
-              {hold > 0 && ` ${hold} ${hold === 1 ? "is" : "are"} on hold (${usd(m.money.held)}).`}
-              {dnp > 0 && ` ${dnp} should not be paid (${usd(m.money.blocked)}).`}
-              {m.waitingForPerson > 0 && ` ${m.waitingForPerson} wait for a person to look.`}
-              {m.outcome.processing > 0 && ` ${m.outcome.processing} still being read.`}
-            </p>
-          )}
-          {m.total === 0 && (
-            <p className="mt-4 max-w-[52ch] text-[#4B5963]">
-              Invoices arrive by email, or you can{" "}
-              <Link href="/queue" className="underline underline-offset-4">
-                upload one
-              </Link>
-              . To see the whole flow with about thirty messy invoices, run the Friday demo at the bottom of this page.
-            </p>
-          )}
+      <section className="space-y-6">
+        <p className="font-mono text-xs uppercase tracking-[0.18em] text-blue-text">Ledgerline, the payment guard</p>
+        <h1 className="font-display max-w-[18ch] text-[2.4rem] leading-[1.08] sm:text-[3.6rem]">
+          Stop paying invoices <span className="neon-text">you shouldn&apos;t.</span>
+        </h1>
+        <p className="max-w-[56ch] text-lg text-text-mute">
+          Catch duplicate, overpaid and suspicious invoices before money leaves.
+          {m.total === 0
+            ? " Nothing has come in yet. Invoices arrive by email, or you can upload one."
+            : ` ${plural(m.total, "invoice", "invoices")} checked so far, ${cleared} cleared to pay (${usd(m.money.cleared)}).`}
+          {m.outcome.processing > 0 && ` ${m.outcome.processing} still being read.`}
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/queue"
+            className={`${linkBase} border-transparent bg-[image:var(--gradient-neon)] text-primary-foreground shadow-[var(--glow-blue)] hover:brightness-110`}
+          >
+            Check an invoice
+          </Link>
+          <Link href="/review" className={`${linkBase} border-neon-blue/60 bg-glass text-foreground hover:bg-neon-blue/15`}>
+            See what is held
+          </Link>
         </div>
-        {m.total > 0 && (
-          <dl aria-label="Totals by decision" className="space-y-3 border-l border-[#C5D0D8] pl-6">
-            {[
-              { v: "auto_approve", n: cleared, d: usd(m.money.cleared) },
-              { v: "escalate", n: hold, d: usd(m.money.held) },
-              { v: "reject", n: dnp, d: usd(m.money.blocked) },
-            ].map((t) => (
-              <div key={t.v} className="flex items-center justify-between gap-4">
-                <dt>
-                  <StatusBadge value={t.v} />
-                </dt>
-                <dd className="text-right">
-                  <span className="font-display text-2xl tabular">{t.n}</span>
-                  <span className="block text-xs text-[#4B5963] tabular">{t.d}</span>
-                </dd>
-              </div>
-            ))}
-          </dl>
-        )}
+      </section>
+
+      <section aria-label="Live guard stats" className="grid gap-4 sm:grid-cols-3">
+        {stats.map((t) => (
+          <Card key={t.label} className="gap-2 py-5">
+            <CardContent>
+              <p className="text-sm text-text-mute">{t.label}</p>
+              <p className={`font-display mt-1 text-4xl tabular ${t.tone}`}>{t.value}</p>
+              <p className="mt-1 text-xs text-text-mute">{t.note}</p>
+            </CardContent>
+          </Card>
+        ))}
       </section>
 
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_17rem]">
-        <section aria-label="Invoices received" className="min-w-0">
+        <section aria-label="Latest guard decisions" className="min-w-0">
+          <h2 className="font-display mb-3 text-2xl">Latest guard decisions</h2>
           <div className="ledger overflow-x-auto">
             <table>
               <thead>
@@ -156,20 +159,20 @@ export default function Friday() {
                         {r.vendor ?? "Reading…"}
                       </Link>
                     </td>
-                    <td className="whitespace-nowrap text-[#4B5963]">{r.invoiceNumber ?? "—"}</td>
+                    <td className="whitespace-nowrap text-text-mute">{r.invoiceNumber ?? "—"}</td>
                     <td className="num">{r.amount != null ? usd(r.amount) : "—"}</td>
                     <td>
                       <StatusBadge value={r.final ?? r.recommendation ?? (r.status === "queued" ? "queued" : "running")} />
                     </td>
-                    <td className="max-w-[22rem] truncate text-[#4B5963]" title={r.reason ?? undefined}>
+                    <td className="max-w-[22rem] truncate text-text-mute" title={r.reason ?? undefined}>
                       {r.reason ?? ""}
                     </td>
                   </tr>
                 ))}
                 {real.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-10 text-center text-[#4B5963]">
-                      The ledger is empty.
+                    <td colSpan={5} className="py-10 text-center text-text-mute">
+                      No invoices checked yet. Run the Friday demo below to watch the guard work.
                     </td>
                   </tr>
                 )}
@@ -178,7 +181,7 @@ export default function Friday() {
           </div>
           {real.length > 14 && (
             <p className="mt-3 text-sm">
-              <Link href="/queue" className="underline underline-offset-4">
+              <Link href="/queue" className="text-blue-text underline underline-offset-4">
                 See all {real.length} invoices
               </Link>
             </p>
@@ -187,9 +190,9 @@ export default function Friday() {
 
         <aside className="space-y-9 text-[0.9375rem]">
           <section>
-            <h2 className="font-display border-b border-[#C5D0D8] pb-1 text-xl">Why things stopped</h2>
+            <h2 className="font-display border-b border-glass-border pb-1 text-xl">Why payments stopped</h2>
             {m.reasons.length === 0 ? (
-              <p className="mt-3 text-[#4B5963]">Nothing has failed a check.</p>
+              <p className="mt-3 text-text-mute">Nothing has failed a check.</p>
             ) : (
               <ul className="mt-3 space-y-3">
                 {m.reasons.slice(0, 6).map((r) => (
@@ -198,8 +201,8 @@ export default function Friday() {
                       <span>{r.label}</span>
                       <span className="tabular">{r.count}</span>
                     </div>
-                    <div className="mt-1 h-1.5 bg-[#DDE5DB]" aria-hidden>
-                      <div className="h-full bg-[#1F2A44]" style={{ width: `${(r.count / maxReason) * 100}%` }} />
+                    <div className="mt-1 h-1.5 rounded-full bg-muted" aria-hidden>
+                      <div className="h-full rounded-full bg-neon-blue" style={{ width: `${(r.count / maxReason) * 100}%` }} />
                     </div>
                   </li>
                 ))}
@@ -208,35 +211,35 @@ export default function Friday() {
           </section>
 
           <section>
-            <h2 className="font-display border-b border-[#C5D0D8] pb-1 text-xl">Checked for you</h2>
-            <p className="mt-3 text-[#4B5963]">
+            <h2 className="font-display border-b border-glass-border pb-1 text-xl">Checked for you</h2>
+            <p className="mt-3 text-text-mute">
               About {m.minutesSaved} minutes of checking saved, counting {m.assumptions.manualMinutesPerInvoice} minutes
               an invoice by hand.
             </p>
-            <p className="mt-2 text-[#4B5963]">
-              {m.duplicatesCaught === 0
-                ? "No re-sent invoices so far."
-                : `${plural(m.duplicatesCaught, "re-sent invoice", "re-sent invoices")} caught before payment.`}
-            </p>
+            {m.total > 0 && (
+              <p className="mt-2 text-text-mute">
+                {plural(cleared, "invoice", "invoices")} cleared, {hold} on hold, {dnp} blocked.
+              </p>
+            )}
           </section>
 
           <section>
-            <h2 className="font-display border-b border-[#C5D0D8] pb-1 text-xl">Work queue</h2>
+            <h2 className="font-display border-b border-glass-border pb-1 text-xl">Guard queue</h2>
             <p className="mt-3">
               {queueDone} of {queueTotal} done
-              {(m.queue.dead ?? 0) > 0 && <span className="text-[#B3261E]">, {m.queue.dead} failed</span>}.
+              {(m.queue.dead ?? 0) > 0 && <span className="text-danger-text">, {m.queue.dead} failed</span>}.
             </p>
-            <div className="mt-2 h-1.5 bg-[#DDE5DB]" role="progressbar" aria-valuenow={queueDone} aria-valuemin={0} aria-valuemax={queueTotal} aria-label="Queue progress">
-              <div className="h-full bg-[#1E7F5C]" style={{ width: `${queueTotal ? (queueDone / queueTotal) * 100 : 0}%` }} />
+            <div className="mt-2 h-1.5 rounded-full bg-muted" role="progressbar" aria-valuenow={queueDone} aria-valuemin={0} aria-valuemax={queueTotal} aria-label="Queue progress">
+              <div className="h-full rounded-full bg-success" style={{ width: `${queueTotal ? (queueDone / queueTotal) * 100 : 0}%` }} />
             </div>
-            <p className="mt-2 text-[#4B5963]">
+            <p className="mt-2 text-text-mute">
               If the worker stops mid-job, the job goes back in the queue. Nothing is lost or paid twice.
             </p>
           </section>
         </aside>
       </div>
 
-      <section className="border-t-2 border-[#1F2A44] pt-6">
+      <section className="border-t border-glass-border pt-6">
         <h2 className="font-display text-2xl">Run the Friday demo</h2>
         <ol className="mt-4 grid max-w-[64rem] list-decimal gap-x-10 gap-y-4 pl-5 text-[0.9375rem] sm:grid-cols-3">
           <li className="pl-1">

@@ -36,7 +36,7 @@ type MasterData = {
   imports: { id: string; source: string; vendors: number; pos: number; po_lines: number; errors: string; at: string }[];
 };
 
-const card = "border-t-2 border-[#1F2A44] pt-4";
+const card = "border-t-2 border-neon-blue pt-4";
 
 export default function OperationsPage() {
   const [queue, setQueue] = useState<QueueData | null>(null);
@@ -92,11 +92,11 @@ export default function OperationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-display text-[2.6rem] leading-[1.1] sm:text-[3.2rem]">Sources and plumbing.</h1>
-        <p className="mt-1 max-w-2xl text-sm text-[#4B5963]">
+        <h1 className="font-display text-[2.6rem] leading-[1.1] sm:text-[3.2rem]">Sources the guard watches.</h1>
+        <p className="mt-1 max-w-2xl text-sm text-text-mute">
           Where invoices come from, what the worker is doing, and which vendor/PO book the decisions are checked against.
         </p>
-        {msg && <p className="mt-2 rounded-none bg-[#E6ECE3] px-3 py-2 text-sm">{msg}</p>}
+        {msg && <p className="mt-2 rounded-none bg-muted px-3 py-2 text-sm">{msg}</p>}
       </div>
 
       <section className={card}>
@@ -113,21 +113,21 @@ export default function OperationsPage() {
         </div>
         {queue && (
           <>
-            <p className="mt-2 text-sm text-[#4B5963]">
+            <p className="mt-2 text-sm text-text-mute">
               Worker {queue.worker.running ? "running" : "not started"}
               {queue.worker.lastTick ? ` · last tick ${new Date(queue.worker.lastTick).toLocaleTimeString()}` : ""} ·{" "}
               {["queued", "running", "done", "dead"].map((k) => `${queue.counts[k] ?? 0} ${k}`).join(" · ")}
             </p>
-            <ul className="mt-3 divide-y divide-[#C5D0D8] text-sm">
+            <ul className="mt-3 divide-y divide-glass-border text-sm">
               {queue.recent.slice(0, 8).map((j) => (
                 <li key={j.id} className="flex flex-wrap justify-between gap-2 py-2">
                   <span>
                     {j.kind} · <b>{j.status}</b> · attempt {j.attempts}/{j.maxAttempts}
                   </span>
-                  <span className="text-[#4B5963]">{j.lastError ?? new Date(j.updatedAt).toLocaleTimeString()}</span>
+                  <span className="text-text-mute">{j.lastError ?? new Date(j.updatedAt).toLocaleTimeString()}</span>
                 </li>
               ))}
-              {!queue.recent.length && <li className="py-2 text-[#4B5963]">No jobs yet.</li>}
+              {!queue.recent.length && <li className="py-2 text-text-mute">No jobs yet.</li>}
             </ul>
           </>
         )}
@@ -145,11 +145,11 @@ export default function OperationsPage() {
             Check mailbox now
           </Button>
         </div>
-        <p className="mt-2 text-sm text-[#4B5963]">
+        <p className="mt-2 text-sm text-text-mute">
           {emails?.imap ? "Mailbox connected (IMAP)." : "No mailbox configured."} Or forward mail to{" "}
           <code>POST /api/intake/email</code> (raw message/rfc822, or multipart field <code>email</code>).
         </p>
-        <ul className="mt-3 divide-y divide-[#C5D0D8] text-sm">
+        <ul className="mt-3 divide-y divide-glass-border text-sm">
           {emails?.emails.map((m) => {
             const ids: string[] = JSON.parse(m.invoiceIds);
             return (
@@ -157,7 +157,7 @@ export default function OperationsPage() {
                 <span>
                   {m.sender ?? "unknown"} — {m.subject ?? "(no subject)"}
                 </span>
-                <span className="text-[#4B5963]">
+                <span className="text-text-mute">
                   {ids.length ? (
                     ids.map((id, i) => (
                       <a key={id} className="underline" href={`/cases/${id}`}>
@@ -171,7 +171,7 @@ export default function OperationsPage() {
               </li>
             );
           })}
-          {!emails?.emails.length && <li className="py-2 text-[#4B5963]">No emails received yet.</li>}
+          {!emails?.emails.length && <li className="py-2 text-text-mute">No emails received yet.</li>}
         </ul>
       </section>
 
@@ -179,7 +179,7 @@ export default function OperationsPage() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-display text-2xl">Vendor &amp; PO book</h2>
           <div className="flex gap-2">
-            <label className="inline-flex min-h-11 cursor-pointer items-center border border-[#1F2A44] bg-[#FBFCFA] px-3.5 text-sm font-medium hover:bg-[#E6ECE3]">
+            <label className="inline-flex min-h-11 cursor-pointer items-center border border-neon-blue bg-glass px-3.5 text-sm font-medium hover:bg-muted">
               Upload CSVs
               <input
                 type="file"
@@ -202,7 +202,7 @@ export default function OperationsPage() {
             </Button>
           </div>
         </div>
-        <p className="mt-2 text-sm text-[#4B5963]">
+        <p className="mt-2 text-sm text-text-mute">
           Files: <code>vendors.csv</code> (name, approved, currency, payment_terms), <code>pos.csv</code> (number, vendor,
           amount, currency, issue_date, description, status, goods_received), <code>po_lines.csv</code> (po_number,
           description, amount). Drop them in <code>data/master</code> and the worker re-imports on change.
@@ -213,7 +213,7 @@ export default function OperationsPage() {
             {master.pos.length} POs · {master.poLineCount} PO lines · {master.hostedDb ? "hosted database" : "local database"} ·{" "}
             {master.erp ? "ERP connected" : "no ERP connected"}
             {master.imports[0] && (
-              <span className="text-[#4B5963]">
+              <span className="text-text-mute">
                 {" "}
                 · last import {new Date(master.imports[0].at).toLocaleString()} ({master.imports[0].source})
               </span>

@@ -21,10 +21,10 @@ export default function ReviewPage() {
     <div className="space-y-8">
       <section>
         <h1 className="font-display max-w-[20ch] text-[2.6rem] leading-[1.1] sm:text-[3.2rem]">
-          {rows && rows.length === 0 ? "Nobody is waiting." : "Waiting for a person."}
+          {rows && rows.length === 0 ? "No payments are held." : "Held until a person looks."}
         </h1>
-        <p className="mt-4 max-w-[52ch] text-[#4B5963]">
-          These invoices are on hold. Open one to see the proposed call and what needs confirming.
+        <p className="mt-4 max-w-[52ch] text-text-mute">
+          The guard stopped these before money left. Open one to see the proposed call and what needs confirming.
         </p>
       </section>
       {rows && rows.length > 0 && (
@@ -48,7 +48,7 @@ export default function ReviewPage() {
                   <td>
                     <StatusBadge value={r.decision?.recommendation ?? r.invoice.status} />
                   </td>
-                  <td className="max-w-[40rem] text-[#4B5963]">
+                  <td className="max-w-[40rem] text-text-mute">
                     <span className="line-clamp-2">{r.decision?.explanation}</span>
                   </td>
                 </tr>

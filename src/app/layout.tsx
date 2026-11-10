@@ -9,8 +9,8 @@ const body = Inter({ variable: "--font-body", subsets: ["latin"], display: "swap
 const mono = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Ledgerline — Invoice decisions",
-  description: "From PDF to a defendable AP decision, with every step visible.",
+  title: "Ledgerline — the payment guard",
+  description: "Catch duplicate, overpaid and suspicious invoices before money leaves.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
