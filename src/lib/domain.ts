@@ -11,7 +11,10 @@ export async function loadPolicy(orgId: string): Promise<Policy> {
   const policy = { ...DEFAULT_POLICY };
   for (const row of rows) {
     const key = row.key as keyof Policy;
-    if (key in policy) (policy[key] as number) = Number(row.value);
+    if (key in policy) {
+      const n = Number(row.value);
+      if (Number.isFinite(n) && n >= 0) (policy[key] as number) = n; // a corrupt value keeps the safe default
+    }
   }
   return policy;
 }

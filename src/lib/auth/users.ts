@@ -274,7 +274,9 @@ export async function approvalLimit(orgId: string, orgRole: OrgRole): Promise<nu
     .where(and(eq(t.policyRules.orgId, orgId), inArray(t.policyRules.key, ["clerkLimit", "approverLimit"])));
   const get = (k: string, d: number) => {
     const row = rows.find((r) => r.key === k);
-    return row ? Number(row.value) : d;
+    if (!row) return d;
+    const n = Number(row.value);
+    return Number.isFinite(n) && n >= 0 ? n : 0; // a corrupt limit must block, never wave everything through
   };
   return orgRole === "admin" ? get("approverLimit", DEFAULT_LIMITS.approver) : get("clerkLimit", DEFAULT_LIMITS.clerk);
 }

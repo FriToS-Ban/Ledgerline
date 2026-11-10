@@ -171,7 +171,7 @@ describe("tenant isolation (zamp-demo vs acme)", () => {
     expect(await read(orgB)).toBe("1");
     expect(await read(orgA)).toBe("25000");
     const unknown = req("/api/policy", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: "nope", value: "1" }) });
-    expect((await PUT(unknown)).status).toBe(404);
+    expect((await PUT(unknown)).status).toBe(400);
   });
 
   it("master data: org B sees none of org A's vendors, POs or imports and its upload stays in B", async () => {
@@ -314,7 +314,7 @@ describe("roles come from memberships.role", () => {
     const queue = await import("@/app/api/queue/route");
     const users = await import("@/app/api/auth/users/route");
     const friday = await import("@/app/api/demo/friday/route");
-    const put = () => req("/api/policy", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: "approvalThreshold", value: "10" }) });
+    const put = () => req("/api/policy", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: "dateWindowDays", value: "10" }) });
     for (const [who, expected] of [[member, 403], [admin, 200], [owner, 200]] as const) {
       as(who);
       expect((await policy.PUT(put())).status).toBe(expected);
