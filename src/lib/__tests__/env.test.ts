@@ -11,6 +11,7 @@ const good = {
   S3_ACCESS_KEY_ID: "k",
   S3_SECRET_ACCESS_KEY: "s",
   INNGEST_SIGNING_KEY: "signkey-prod-1",
+  APP_ORIGINS: "https://app.example.com",
 };
 const errs = (e: Record<string, string | undefined>) => {
   const r = validateEnv(e);
@@ -33,6 +34,28 @@ describe("validateEnv", () => {
     expect(errs({ ...good, AUTH_SECRET: "short" })).toContain("AUTH_SECRET");
     expect(errs({ ...good, AUTH_DISABLED: "1" })).toContain("AUTH_DISABLED");
     expect(errs({ ...good, STORAGE_DRIVER: "memory" })).toContain("STORAGE_DRIVER");
+  });
+  it("refuses demo users with the default or a short password", () => {
+    expect(errs({ ...good, DEMO_USERS: "1" })).toContain("DEMO_USERS");
+    expect(errs({ ...good, DEMO_USERS: "1", DEMO_PASSWORD: "ledgerline" })).toContain("DEMO_USERS");
+    expect(errs({ ...good, DEMO_USERS: "1", DEMO_PASSWORD: "short" })).toContain("DEMO_USERS");
+    expect(validateEnv({ ...good, DEMO_USERS: "1", DEMO_PASSWORD: "a-long-demo-pass" })).toEqual({ ok: true });
+  });
+  it("requires https AUTH_URL and APP_ORIGINS or TRUST_PROXY", () => {
+    expect(errs({ ...good, AUTH_URL: "http://app.example.com" })).toContain("AUTH_URL");
+    expect(validateEnv({ ...good, AUTH_URL: "http://app.example.com", AUTH_ALLOW_HTTP: "1" })).toEqual({ ok: true });
+    expect(errs({ ...good, APP_ORIGINS: undefined })).toContain("APP_ORIGINS");
+    expect(validateEnv({ ...good, APP_ORIGINS: undefined, TRUST_PROXY: "1" })).toEqual({ ok: true });
+  });
+  it("refuses default database credentials and plain-http S3", () => {
+    expect(errs({ ...good, DATABASE_URL: "postgres://postgres:postgres@db:5432/x" })).toContain("DATABASE_URL");
+    expect(errs({ ...good, S3_ENDPOINT: "http://s3.internal:9000" })).toContain("S3_ENDPOINT");
+    expect(validateEnv({ ...good, S3_ENDPOINT: "http://s3:9090", S3_ALLOW_INSECURE: "1" })).toEqual({ ok: true });
+    expect(validateEnv({ ...good, S3_ENDPOINT: "https://s3.example.com" })).toEqual({ ok: true });
+  });
+  it("requires a long INTAKE_SECRET when set", () => {
+    expect(errs({ ...good, INTAKE_SECRET: "short" })).toContain("INTAKE_SECRET");
+    expect(validateEnv({ ...good, INTAKE_SECRET: "i".repeat(24) })).toEqual({ ok: true });
   });
 });
 

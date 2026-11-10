@@ -4,10 +4,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (any value for local dev; the containerized app refuses postgres:postgres)}
       POSTGRES_DB: ${POSTGRES_DB:-ledgerline}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -16,16 +16,18 @@ services:
       timeout: 5s
       retries: 10
 
-  # S3-compatible object store for local/dev compose. Production uses any S3 endpoint
-  # (AWS S3, Cloudflare R2, MinIO, ...): just point the S3_* variables at it and drop this service.
-  # NOTE: s3mock keeps objects in a temp dir, so files are lost when this container is recreated.
+  # DEV ONLY (profile "dev"): `docker compose --profile dev up -d s3`. s3mock performs no credential
+  # checks and keeps objects in a temp dir (lost when the container is recreated). Production uses any
+  # real S3 endpoint (AWS S3, Cloudflare R2, MinIO, ...): point the S3_* variables at it.
+  # With the mock, the containerized app also needs S3_ALLOW_INSECURE=1 (plain http inside the network).
   s3:
-    image: adobe/s3mock:latest
+    profiles: ["dev"]
+    image: adobe/s3mock:5.2.3
     restart: unless-stopped
     environment:
       COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: ${S3_BUCKET:-ledgerline}
     ports:
-      - "${S3_PORT:-9090}:9090"
+      - "127.0.0.1:${S3_PORT:-9090}:9090"
 
   app:
     build: .
@@ -35,12 +37,13 @@ services:
         condition: service_healthy
       s3:
         condition: service_started
+        required: false
     env_file:
       - path: .env
         required: false
     environment:
       # Container wiring wins over .env (which may hold localhost URLs for `npm run dev`).
-      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ledgerline}
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ledgerline}
       S3_ENDPOINT: ${APP_S3_ENDPOINT:-http://s3:9090}
       S3_FORCE_PATH_STYLE: ${APP_S3_FORCE_PATH_STYLE:-1}
       S3_BUCKET: ${S3_BUCKET:-ledgerline}
@@ -50,6 +53,9 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET (>= 32 chars) in .env}
       AUTH_URL: ${AUTH_URL:-http://localhost:3000}
       INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:?set INNGEST_SIGNING_KEY in .env}
+      S3_ALLOW_INSECURE: ${S3_ALLOW_INSECURE:-0}
+      AUTH_ALLOW_HTTP: ${AUTH_ALLOW_HTTP:-0}
+      APP_ORIGINS: ${APP_ORIGINS:-}
       TRUST_PROXY: ${TRUST_PROXY:-0}
       DEMO_USERS: ${DEMO_USERS:-0}
     ports:

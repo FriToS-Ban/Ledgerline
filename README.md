@@ -35,7 +35,7 @@ Every tenant table carries `org_id`, and every query, update, delete and insert 
 
 ### File storage
 
-Uploaded invoices (web upload, email attachments) live in S3-compatible object storage, never under `public/`. For local dev run `docker compose up -d s3` (an S3-compatible store, `adobe/s3mock`, with the bucket pre-created) and set the `S3_*` variables from `.env.example`; production uses any S3 endpoint (AWS S3, Cloudflare R2, MinIO). Objects are keyed `org/<orgId>/<uuid>-<filename>`; `invoices.pdf_path` stores the key. Files are served only by `GET /api/files/<invoiceId>`, which checks the caller's organization, streams the object and sets `nosniff` and `private, no-store`; there are no public or presigned URLs. Uploads are limited to PDF and common images, 15 MB. Tests use an in-memory driver (`STORAGE_DRIVER=memory`).
+Uploaded invoices (web upload, email attachments) live in S3-compatible object storage, never under `public/`. For local dev run `docker compose --profile dev up -d s3` (a dev-only S3-compatible store, `adobe/s3mock:5.2.3`, bound to 127.0.0.1, with the bucket pre-created; it does no credential checking) and set the `S3_*` variables from `.env.example`; production uses any S3 endpoint (AWS S3, Cloudflare R2, MinIO). Objects are keyed `org/<orgId>/<uuid>-<filename>`; `invoices.pdf_path` stores the key. Files are served only by `GET /api/files/<invoiceId>`, which checks the caller's organization, streams the object and sets `nosniff` and `private, no-store`; there are no public or presigned URLs. Uploads are limited to PDF and common images, 15 MB. Tests use an in-memory driver (`STORAGE_DRIVER=memory`).
 
 ## Production
 
@@ -45,17 +45,19 @@ docker compose up -d --build
 curl http://localhost:3000/api/health   # {"status":"ok"}
 ```
 
-The image (`Dockerfile`, Next.js `output: "standalone"`, non-root) runs `migrate.cjs` (drizzle migrations, serialised by a Postgres advisory lock, exits non-zero on failure) and then `node server.js`. The app validates its environment at boot (`src/lib/env.ts`) and refuses to start with a clear message if a required variable is missing. `docker compose` ships `db` (Postgres) and `s3` (local S3-compatible store); in production point `DATABASE_URL` / `S3_*` at managed services and drop those two.
+The image (`Dockerfile`, Next.js `output: "standalone"`, non-root) runs `migrate.cjs` (drizzle migrations, serialised by a Postgres advisory lock, exits non-zero on failure) and then `node server.js`. The app validates its environment at boot (`src/lib/env.ts`) and refuses to start with a clear message if a required variable is missing. `docker compose` ships `db` (Postgres, published on 127.0.0.1 only; `POSTGRES_PASSWORD` is required) and, under the `dev` profile, `s3` (local S3-compatible mock). `POSTGRES_PASSWORD=postgres` is fine for `npm run dev` against `docker compose up -d db`, but the containerized app refuses `postgres:postgres` credentials in production, so pick another password for the full stack. To try the full stack on one machine over plain http set `AUTH_ALLOW_HTTP=1`, `APP_ORIGINS=http://localhost:3000`, and, with the mock store, `S3_ALLOW_INSECURE=1` and `docker compose --profile dev up -d --build`. In real production point `DATABASE_URL` / `S3_*` at managed services and drop those two.
 
 | Variable | Required | Notes |
 | --- | --- | --- |
 | `DATABASE_URL` | yes | `postgres://user:pass@host:5432/db` (compose wires it to the `db` service) |
 | `AUTH_SECRET` | yes | >= 32 chars (`openssl rand -hex 32`) |
-| `AUTH_URL` | yes (or `AUTH_TRUST_HOST=1`) | public origin, e.g. `https://ap.example.com` |
-| `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | yes | `S3_ENDPOINT` / `S3_REGION` / `S3_FORCE_PATH_STYLE` per provider |
+| `AUTH_URL` | yes (or `AUTH_TRUST_HOST=1`) | public origin, must be `https://` (`AUTH_ALLOW_HTTP=1` overrides on a trusted http-only network), e.g. `https://ap.example.com` |
+| `APP_ORIGINS` or `TRUST_PROXY=1` | yes | `APP_ORIGINS` = comma-separated public origins for CSRF checks; `TRUST_PROXY=1` when a proxy sets forwarded headers |
+| `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | yes | `S3_ENDPOINT` / `S3_REGION` / `S3_FORCE_PATH_STYLE` per provider; a plain `http://` `S3_ENDPOINT` is refused unless `S3_ALLOW_INSECURE=1` |
 | `INNGEST_SIGNING_KEY` | yes | `/api/inngest` verifies request signatures; never expose it unsigned |
 | `TRUST_PROXY` | behind a proxy | `1` only if a proxy sets `X-Forwarded-For` |
-| `INTAKE_SECRET` | optional | enables the email webhook |
+| `INTAKE_SECRET` | optional | >= 24 chars; enables the email webhook |
+| `DEMO_USERS=1` | discouraged | in production needs `DEMO_PASSWORD` (>= 12 chars, not `ledgerline`) |
 | `AUTH_DISABLED`, `STORAGE_DRIVER=memory` | forbidden | rejected at boot in production |
 
 Backups: all state lives in Postgres (`pg_dump` the volume or use your provider's snapshots) and the S3 bucket (enable bucket versioning/replication). The compose volumes `pgdata` and `s3data` are not backed up by default. Run `npm run db:migrate` manually only outside Docker; the container migrates on every start.

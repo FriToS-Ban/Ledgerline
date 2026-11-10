@@ -22,6 +22,13 @@ const prodSchema = z
     S3_SECRET_ACCESS_KEY: z.string().trim().optional(),
     INNGEST_SIGNING_KEY: z.string().trim().optional(),
     DEMO_USERS: flag,
+    DEMO_PASSWORD: z.string().optional(),
+    S3_ENDPOINT: z.string().trim().optional(),
+    S3_ALLOW_INSECURE: flag,
+    AUTH_ALLOW_HTTP: flag,
+    APP_ORIGINS: z.string().trim().optional(),
+    TRUST_PROXY: flag,
+    INTAKE_SECRET: z.string().trim().optional(),
   });
 
 type E = Record<string, string | undefined>;
@@ -35,6 +42,29 @@ function crossChecks(e: E): string[] {
       add("AUTH_URL", "set AUTH_URL to the public origin (or AUTH_TRUST_HOST=1 behind a trusted proxy)");
     }
     if (e.AUTH_URL && !/^https?:\/\//.test(e.AUTH_URL)) add("AUTH_URL", "must start with http:// or https://");
+    if (e.AUTH_URL && /^http:\/\//.test(e.AUTH_URL) && e.AUTH_ALLOW_HTTP !== "1") {
+      add("AUTH_URL", "must be https:// in production (set AUTH_ALLOW_HTTP=1 only for a trusted http-only network)");
+    }
+    if (!e.APP_ORIGINS?.trim() && e.TRUST_PROXY !== "1") {
+      add("APP_ORIGINS", "set APP_ORIGINS (comma-separated public origins) or TRUST_PROXY=1 behind a proxy, so CSRF origin checks and client IPs are correct");
+    }
+    if (e.DATABASE_URL) {
+      try {
+        const u = new URL(e.DATABASE_URL);
+        if (decodeURIComponent(u.username) === "postgres" && decodeURIComponent(u.password) === "postgres") {
+          add("DATABASE_URL", "uses the default postgres:postgres credentials; set a real password");
+        }
+      } catch {
+        /* unparsable URLs are reported by the schema */
+      }
+    }
+    if (e.S3_ENDPOINT && /^http:\/\//i.test(e.S3_ENDPOINT) && e.S3_ALLOW_INSECURE !== "1") {
+      add("S3_ENDPOINT", "plain http endpoints are refused in production; use https:// (or S3_ALLOW_INSECURE=1 on a trusted private network)");
+    }
+    if (e.INTAKE_SECRET && e.INTAKE_SECRET.length < 24) add("INTAKE_SECRET", "must be at least 24 characters when set");
+    if (e.DEMO_USERS === "1" && (!e.DEMO_PASSWORD || e.DEMO_PASSWORD === "ledgerline" || e.DEMO_PASSWORD.length < 12)) {
+      add("DEMO_USERS", "DEMO_USERS=1 in production requires DEMO_PASSWORD (>= 12 chars, not the default)");
+    }
     if (e.AUTH_DISABLED === "1") add("AUTH_DISABLED", "AUTH_DISABLED=1 is not allowed in production");
     if (e.STORAGE_DRIVER === "memory") add("STORAGE_DRIVER", "the in-memory driver loses files on restart; use S3");
     if (e.STORAGE_DRIVER !== "memory") {
