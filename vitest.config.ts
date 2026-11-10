@@ -5,6 +5,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    globalSetup: ["src/test/global-setup.ts"],
+    setupFiles: ["src/test/setup.ts"],
+    testTimeout: 20_000,
   },
   resolve: {
     alias: { "@": path.resolve(__dirname, "src") },
