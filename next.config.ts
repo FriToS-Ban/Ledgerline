@@ -84,9 +84,7 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: [
     "@mastra/core",
-    "@mastra/libsql",
     "@mastra/loggers",
-    "@libsql/client",
     "tesseract.js",
     "pdfjs-dist",
     "inngest",

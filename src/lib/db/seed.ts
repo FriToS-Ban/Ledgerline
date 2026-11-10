@@ -1,21 +1,24 @@
-import { ensureSchema, rawDbClient } from "./client";
+import { and, eq, sql } from "drizzle-orm";
+import { getDb } from "./client";
+import { defaultOrgId } from "./org";
+import * as t from "./schema";
 import { generateDemoPdfs } from "@/lib/pdf/generate";
 
 const MASTER = {
   vendors: [
-    { id: "v-apex", name: "Apex Industrial Supply", legalName: "Apex Industrial Supply Inc.", approved: 1, currency: "USD", paymentTerms: "Net 30" },
-    { id: "v-north", name: "Northwind Logistics", legalName: "Northwind Logistics Ltd.", approved: 1, currency: "USD", paymentTerms: "Net 45" },
-    { id: "v-helios", name: "Helios Components GmbH", legalName: "Helios Components GmbH", approved: 1, currency: "EUR", paymentTerms: "Net 30" },
-    { id: "v-meridian", name: "Meridian Facilities", legalName: "Meridian Facilities LLC", approved: 1, currency: "USD", paymentTerms: "Net 30" },
+    { id: "v-apex", name: "Apex Industrial Supply", legalName: "Apex Industrial Supply Inc.", approved: true, currency: "USD", paymentTerms: "Net 30" },
+    { id: "v-north", name: "Northwind Logistics", legalName: "Northwind Logistics Ltd.", approved: true, currency: "USD", paymentTerms: "Net 45" },
+    { id: "v-helios", name: "Helios Components GmbH", legalName: "Helios Components GmbH", approved: true, currency: "EUR", paymentTerms: "Net 30" },
+    { id: "v-meridian", name: "Meridian Facilities", legalName: "Meridian Facilities LLC", approved: true, currency: "USD", paymentTerms: "Net 30" },
   ],
   pos: [
-    { id: "po-31000", number: "PO-31000", vendorId: "v-apex", amount: 31000, currency: "USD", status: "open", issueDate: "2026-09-01", description: "Stainless fastener kit blanket — progressive billing", goodsReceived: 1 },
-    { id: "po-88021", number: "PO-88021", vendorId: "v-apex", amount: 8450, currency: "USD", status: "open", issueDate: "2026-10-02", description: "Stainless fasteners kit hex cap screws M8", goodsReceived: 1 },
-    { id: "po-4410", number: "PO-4410", vendorId: "v-north", amount: 5380, currency: "USD", status: "open", issueDate: "2026-10-01", description: "Inbound logistics with estimated freight 180", goodsReceived: 1 },
-    { id: "po-5519", number: "PO-5519", vendorId: "v-apex", amount: 4210, currency: "USD", status: "open", issueDate: "2026-10-10", description: "Metric hex nuts assortment 8-12mm", goodsReceived: 1 },
-    { id: "po-eur-19", number: "PO-EUR-19", vendorId: "v-helios", amount: 10603.6, currency: "USD", status: "open", issueDate: "2026-10-05", description: "Precision bearings 6204-2RS", goodsReceived: 1 },
-    { id: "po-7701", number: "PO-7701", vendorId: "v-meridian", amount: 3000, currency: "USD", status: "open", issueDate: "2026-10-08", description: "Q4 HVAC filter replacement", goodsReceived: 1 },
-    { id: "po-7702", number: "PO-7702", vendorId: "v-meridian", amount: 1800, currency: "USD", status: "open", issueDate: "2026-10-08", description: "Emergency rooftop unit service", goodsReceived: 1 },
+    { id: "po-31000", number: "PO-31000", vendorId: "v-apex", amount: 31000, currency: "USD", status: "open", issueDate: "2026-09-01", description: "Stainless fastener kit blanket — progressive billing", goodsReceived: true },
+    { id: "po-88021", number: "PO-88021", vendorId: "v-apex", amount: 8450, currency: "USD", status: "open", issueDate: "2026-10-02", description: "Stainless fasteners kit hex cap screws M8", goodsReceived: true },
+    { id: "po-4410", number: "PO-4410", vendorId: "v-north", amount: 5380, currency: "USD", status: "open", issueDate: "2026-10-01", description: "Inbound logistics with estimated freight 180", goodsReceived: true },
+    { id: "po-5519", number: "PO-5519", vendorId: "v-apex", amount: 4210, currency: "USD", status: "open", issueDate: "2026-10-10", description: "Metric hex nuts assortment 8-12mm", goodsReceived: true },
+    { id: "po-eur-19", number: "PO-EUR-19", vendorId: "v-helios", amount: 10603.6, currency: "USD", status: "open", issueDate: "2026-10-05", description: "Precision bearings 6204-2RS", goodsReceived: true },
+    { id: "po-7701", number: "PO-7701", vendorId: "v-meridian", amount: 3000, currency: "USD", status: "open", issueDate: "2026-10-08", description: "Q4 HVAC filter replacement", goodsReceived: true },
+    { id: "po-7702", number: "PO-7702", vendorId: "v-meridian", amount: 1800, currency: "USD", status: "open", issueDate: "2026-10-08", description: "Emergency rooftop unit service", goodsReceived: true },
   ],
   poLines: [
     { id: "pl1", poId: "po-31000", description: "Fastener kit phase deliveries", amount: 31000 },
@@ -25,8 +28,8 @@ const MASTER = {
     { id: "pl5", poId: "po-7702", description: "RTU service", amount: 1800 },
   ],
   historyInvoices: [
-    { id: "inv-hist-1", demoId: "seed-partial-1", vendorId: "v-apex", invoiceNumber: "INV-P-1100", invoiceDate: "2026-09-20", currency: "USD", total: 12400, pdfPath: null, status: "approved", runId: null, createdAt: "2026-09-20T12:00:00Z" },
-    { id: "inv-hist-2", demoId: "seed-dup", vendorId: "v-apex", invoiceNumber: "INV-8842", invoiceDate: "2026-10-20", currency: "USD", total: 4210, pdfPath: null, status: "approved", runId: null, createdAt: "2026-10-20T12:00:00Z" },
+    { id: "inv-hist-1", demoId: "seed-partial-1", vendorId: "v-apex", invoiceNumber: "INV-P-1100", invoiceDate: "2026-09-20", currency: "USD", total: 12400, pdfPath: null, status: "approved", runId: null, createdAt: new Date("2026-09-20T12:00:00Z") },
+    { id: "inv-hist-2", demoId: "seed-dup", vendorId: "v-apex", invoiceNumber: "INV-8842", invoiceDate: "2026-10-20", currency: "USD", total: 4210, pdfPath: null, status: "approved", runId: null, createdAt: new Date("2026-10-20T12:00:00Z") },
   ],
   historyMatches: [
     { id: "m1", invoiceId: "inv-hist-1", poId: "po-31000", amount: 12400, method: "explicit", status: "approved" },
@@ -42,103 +45,57 @@ const MASTER = {
     { id: "fx4", base: "INR", quote: "USD", rate: 0.012, asOf: "2026-10-01", source: "seed" },
   ],
   policy: [
-    { id: "p1", key: "amountTolerancePct", value: "0.02", label: "Amount tolerance %", enabled: 1 },
-    { id: "p2", key: "amountToleranceAbs", value: "50", label: "Amount tolerance $", enabled: 1 },
-    { id: "p3", key: "duplicateAmountPct", value: "0.015", label: "Near-duplicate amount %", enabled: 1 },
-    { id: "p4", key: "confidenceFloor", value: "0.7", label: "Extraction confidence floor", enabled: 1 },
-    { id: "p5", key: "fxMaxAgeDays", value: "7", label: "FX rate max age (days)", enabled: 1 },
-    { id: "p6", key: "approvalThreshold", value: "25000", label: "Approval threshold", enabled: 1 },
-    { id: "p7", key: "impliedMatchAuto", value: "0.85", label: "Implied match auto-approve score", enabled: 1 },
-    { id: "p8", key: "impliedMatchEscalate", value: "0.55", label: "Implied match candidate floor", enabled: 1 },
-    { id: "p9", key: "dateWindowDays", value: "45", label: "PO date window (days)", enabled: 1 },
-    { id: "p10", key: "duplicateDateWindowDays", value: "14", label: "Duplicate date window (days)", enabled: 1 },
+    { id: "p1", key: "amountTolerancePct", value: "0.02", label: "Amount tolerance %", enabled: true },
+    { id: "p2", key: "amountToleranceAbs", value: "50", label: "Amount tolerance $", enabled: true },
+    { id: "p3", key: "duplicateAmountPct", value: "0.015", label: "Near-duplicate amount %", enabled: true },
+    { id: "p4", key: "confidenceFloor", value: "0.7", label: "Extraction confidence floor", enabled: true },
+    { id: "p5", key: "fxMaxAgeDays", value: "7", label: "FX rate max age (days)", enabled: true },
+    { id: "p6", key: "approvalThreshold", value: "25000", label: "Approval threshold", enabled: true },
+    { id: "p7", key: "impliedMatchAuto", value: "0.85", label: "Implied match auto-approve score", enabled: true },
+    { id: "p8", key: "impliedMatchEscalate", value: "0.55", label: "Implied match candidate floor", enabled: true },
+    { id: "p9", key: "dateWindowDays", value: "45", label: "PO date window (days)", enabled: true },
+    { id: "p10", key: "duplicateDateWindowDays", value: "14", label: "Duplicate date window (days)", enabled: true },
   ],
 };
 
-export async function seedDatabase() {
-  await ensureSchema();
-  const client = rawDbClient();
+/** Loads the demo vendor / PO book, history and policy into one org (default: zamp-demo). Idempotent. */
+export async function seedDatabase(orgIdArg?: string, opts: { pdfs?: boolean } = {}) {
+  const orgId = orgIdArg ?? (await defaultOrgId());
+  const db = getDb();
+  const [{ n }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(t.vendors)
+    .where(eq(t.vendors.orgId, orgId));
+  const empty = n === 0;
+  const withOrg = <T extends object>(rows: T[]) => rows.map((r) => ({ ...r, orgId }));
 
-  const count = await client.execute("SELECT COUNT(*) as c FROM vendors");
-  const n = Number(count.rows[0]?.c ?? 0);
-  if (n === 0) {
-    for (const v of MASTER.vendors) {
-      await client.execute({
-        sql: "INSERT INTO vendors (id,name,legal_name,approved,currency,payment_terms) VALUES (?,?,?,?,?,?)",
-        args: [v.id, v.name, v.legalName, v.approved, v.currency, v.paymentTerms],
-      });
-    }
-    for (const p of MASTER.pos) {
-      await client.execute({
-        sql: "INSERT INTO purchase_orders (id,number,vendor_id,amount,currency,status,issue_date,description,goods_received) VALUES (?,?,?,?,?,?,?,?,?)",
-        args: [p.id, p.number, p.vendorId, p.amount, p.currency, p.status, p.issueDate, p.description, p.goodsReceived],
-      });
-    }
-    for (const l of MASTER.poLines) {
-      await client.execute({
-        sql: "INSERT INTO po_lines (id,po_id,description,amount) VALUES (?,?,?,?)",
-        args: [l.id, l.poId, l.description, l.amount],
-      });
-    }
-    for (const inv of MASTER.historyInvoices) {
-      await client.execute({
-        sql: "INSERT INTO invoices (id,demo_id,vendor_id,invoice_number,invoice_date,currency,total,pdf_path,status,run_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-        args: [inv.id, inv.demoId, inv.vendorId, inv.invoiceNumber, inv.invoiceDate, inv.currency, inv.total, inv.pdfPath, inv.status, inv.runId, inv.createdAt],
-      });
-    }
-    for (const m of MASTER.historyMatches) {
-      await client.execute({
-        sql: "INSERT INTO matches (id,invoice_id,po_id,amount,method,status) VALUES (?,?,?,?,?,?)",
-        args: [m.id, m.invoiceId, m.poId, m.amount, m.method, m.status],
-      });
-    }
-    for (const l of MASTER.historyLines) {
-      await client.execute({
-        sql: "INSERT INTO invoice_lines (id,invoice_id,description,amount,po_number) VALUES (?,?,?,?,?)",
-        args: [l.id, l.invoiceId, l.description, l.amount, l.poNumber],
-      });
-    }
-    for (const f of MASTER.fx) {
-      await client.execute({
-        sql: "INSERT INTO fx_rates (id,base,quote,rate,as_of,source) VALUES (?,?,?,?,?,?)",
-        args: [f.id, f.base, f.quote, f.rate, f.asOf, f.source],
-      });
-    }
-    for (const p of MASTER.policy) {
-      await client.execute({
-        sql: "INSERT INTO policy_rules (id,key,value,label,enabled) VALUES (?,?,?,?,?)",
-        args: [p.id, p.key, p.value, p.label, p.enabled],
-      });
-    }
+  if (empty) {
+    await db.insert(t.vendors).values(withOrg(MASTER.vendors)).onConflictDoNothing();
+    await db.insert(t.purchaseOrders).values(withOrg(MASTER.pos)).onConflictDoNothing();
+    await db.insert(t.poLines).values(withOrg(MASTER.poLines)).onConflictDoNothing();
+    await db.insert(t.invoices).values(withOrg(MASTER.historyInvoices)).onConflictDoNothing();
+    await db.insert(t.matches).values(withOrg(MASTER.historyMatches)).onConflictDoNothing();
+    await db.insert(t.invoiceLines).values(withOrg(MASTER.historyLines)).onConflictDoNothing();
+    await db.insert(t.fxRates).values(withOrg(MASTER.fx)).onConflictDoNothing();
+    await db.insert(t.policyRules).values(withOrg(MASTER.policy)).onConflictDoNothing();
   }
 
   for (const r of [
     { id: "p11", key: "clerkLimit", value: "5000", label: "Clerk approval limit ($)" },
     { id: "p12", key: "approverLimit", value: "100000", label: "Approver approval limit ($)" },
   ]) {
-    const have = await client.execute({ sql: "SELECT id FROM policy_rules WHERE key = ?", args: [r.key] });
-    if (!have.rows.length) {
-      await client.execute({
-        sql: "INSERT INTO policy_rules (id,key,value,label,enabled) VALUES (?,?,?,?,1)",
-        args: [r.id, r.key, r.value, r.label],
-      });
-    }
+    const have = await db
+      .select({ id: t.policyRules.id })
+      .from(t.policyRules)
+      .where(and(eq(t.policyRules.orgId, orgId), eq(t.policyRules.key, r.key)));
+    if (!have.length) await db.insert(t.policyRules).values({ ...r, orgId, enabled: true }).onConflictDoNothing();
   }
 
-  const inr = await client.execute("SELECT id FROM fx_rates WHERE id = 'fx4'");
-  if (!inr.rows.length) {
-    await client.execute({
-      sql: "INSERT INTO fx_rates (id,base,quote,rate,as_of,source) VALUES (?,?,?,?,?,?)",
-      args: ["fx4", "INR", "USD", 0.012, "2026-10-01", "seed"],
-    });
-  }
+  await db
+    .insert(t.fxRates)
+    .values({ orgId, id: "fx4", base: "INR", quote: "USD", rate: 0.012, asOf: "2026-10-01", source: "seed" })
+    .onConflictDoNothing();
 
-  await generateDemoPdfs();
-  return { seeded: n === 0 };
-}
-
-if (process.argv[1]?.includes("seed")) {
-  seedDatabase().then((r) => {
-    console.log(r);
-  });
+  if (opts.pdfs !== false) await generateDemoPdfs();
+  return { seeded: empty };
 }
