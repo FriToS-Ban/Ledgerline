@@ -111,7 +111,7 @@ export function OrgSwitcher() {
         aria-controls={panelId}
         aria-label={`Workspace: ${active?.name ?? "unknown"}. Switch workspace`}
         onClick={() => (open ? close(false) : setOpen(true))}
-        className="flex min-h-11 max-w-[11rem] items-center gap-1.5 rounded-full border border-glass-border bg-glass px-3 text-sm transition-colors hover:bg-muted sm:max-w-[15rem]"
+        className="flex min-h-11 max-w-[9rem] items-center gap-1.5 rounded-full border border-glass-border bg-glass px-3 min-[420px]:max-w-[11rem] text-sm transition-colors hover:bg-muted sm:max-w-[15rem]"
       >
         <Building2 className="size-4 shrink-0 text-blue-text" aria-hidden />
         <span className="truncate">{active?.name}</span>

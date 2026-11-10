@@ -168,10 +168,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 {!me.email.startsWith("auth-disabled") && (
                   <button
                     onClick={() => void signOut()}
-                    className="flex min-h-11 items-center gap-1.5 rounded-full px-3 text-text-mute transition-colors hover:bg-muted hover:text-foreground"
+                    aria-label="Sign out"
+                    className="flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-full px-2 text-text-mute sm:px-3 transition-colors hover:bg-muted hover:text-foreground"
                   >
                     <LogOut className="size-4" aria-hidden />
-                    <span>Sign out</span>
+                    <span className="hidden sm:inline">Sign out</span>
                   </button>
                 )}
               </>
