@@ -101,7 +101,7 @@ export default function InvitePage() {
             </h1>
             <p className="mt-2 text-text-mute">
               You were invited as <span className="font-mono uppercase text-foreground">{state.invite.role}</span> using{" "}
-              <span className="break-all text-foreground">{state.invite.email}</span>.
+              <span className="[overflow-wrap:anywhere] text-foreground">{state.invite.email}</span>.
             </p>
             <div className="mt-6 space-y-3">
               {!state.me && (
@@ -132,7 +132,7 @@ export default function InvitePage() {
                     <AlertDescription>
                       <p>
                         This invite was sent to a different email address. You are signed in as{" "}
-                        <span className="break-all font-medium">{state.me.email}</span>. Sign in with the invited address to join.
+                        <span className="[overflow-wrap:anywhere] font-medium">{state.me.email}</span>. Sign in with the invited address to join.
                       </p>
                     </AlertDescription>
                   </Alert>
