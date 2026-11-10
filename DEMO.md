@@ -35,15 +35,15 @@ Speak slowly. Say the bold lines out loud. The "Do" lines are what you click.
 
 **Say:** "Here is a normal Friday inbox. Invoices come in by email. I will load a week's worth."
 
-**Do:** Scroll to "Run the Friday demo". Click the load button. Watch the numbers on the page change as invoices are read.
+**Do:** Scroll to the bottom of the landing page, "Run the Friday demo", and click **Load the inbox**. About 34 invoices are read over roughly 2 minutes, and the "Guard queue" line counts up ("N of 34 done"). Talk through the numbers at the top while it works. Prepare ahead: load it before the meeting, because a case you open while the queue is busy is blank until the agent reaches it.
 
 **Say:** "Behind the scenes the agent reads each PDF, finds the vendor, amount and purchase order, and checks it against what we actually ordered."
 
 ### 1:15 to 2:15. The agent stops a bad payment
 
-**Do:** Open **Invoices** in the top bar. Click the **near-duplicate** invoice.
+**Do:** Open **Invoices** in the top bar. Either click **INV-8843** (Apex Industrial Supply, $4,273) in the list, or scroll to "Try a known threat" and click **Run this case** under **Near-duplicate**.
 
-**Say:** "This one has a different invoice number, but the amount is within about one percent of an invoice we already paid. A person skimming would miss that. The guard held it."
+**Say:** "This one has a different invoice number, but the amount is within one and a half percent of an invoice we already paid. A person skimming would miss that. The guard held it."
 
 **Do:** Point at the three things on the case page, in this order:
 1. The PDF on the left.
@@ -54,7 +54,7 @@ Speak slowly. Say the bold lines out loud. The "Do" lines are what you click.
 
 ### 2:15 to 3:00. The human stays in control
 
-**Do:** On the held invoice, show the three buttons: **Release as proposed**, **Override and release in full**, **Block payment**. Click **Block payment** (or release, your choice).
+**Do:** On the held invoice, show the three buttons: **Release as proposed**, **Override and release in full**, **Block payment**. Click **Block payment** (or release, your choice). A "Decision recorded" message appears; the badge changes to BLOCK, though the big headline still reads "Hold payment", so point at the badge.
 
 **Say:** "The agent does not get the last word on risky money. A person decides, and the decision is recorded."
 
@@ -64,11 +64,11 @@ Speak slowly. Say the bold lines out loud. The "Do" lines are what you click.
 
 ### 3:00 to 3:40. Many companies, one product (multi-tenancy)
 
-**Do:** Click the workspace name in the header to open the switcher. Show Zamp Demo.
+**Do:** Click the workspace name at the top right ("Zamp Demo") to open the menu. Show **Workspace settings** and **Create workspace**.
 
 **Say:** "This is multi-tenant. Each customer is a separate workspace."
 
-**Do:** Switch to the second window, signed in as the Acme owner. Show the empty queue.
+**Do:** Switch to the second window, signed in as the Acme owner (the admin account belongs to one workspace only, so Acme needs its own login). Open **Invoices** and show the empty table.
 
 **Say:** "Acme sees none of the other company's invoices, files or rules. Isolation is enforced on every query and covered by automated tests."
 
@@ -86,7 +86,7 @@ Speak slowly. Say the bold lines out loud. The "Do" lines are what you click.
 |---|---|
 | Page will not load | Check Docker is running, then `docker compose --profile dev up -d`, then restart `npm run dev`. |
 | Upload fails | The dev S3 container is not running. Start it with the compose command above. |
-| Friday demo says "already loaded" | That is fine. Open **Invoices** and continue. |
+| Case page is blank or the numbers are still climbing | The agent is still working through the Friday inbox (about 2 minutes). Wait for "34 of 34 done" on the landing page, then refresh. |
 | You get signed out | Sign in again. Sessions last 8 hours. |
 | A button does nothing | Refresh once. If still broken, move on and use the screenshots or the code. |
 
