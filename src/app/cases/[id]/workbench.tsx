@@ -70,8 +70,8 @@ export function Workbench({ id }: { id: string }) {
     await load();
   }
 
-  if (error) return <p className="text-sm text-[#8f2d2d]">{error}</p>;
-  if (!data) return <p className="text-sm text-[#4B5963]">Reading the document…</p>;
+  if (error) return <p className="text-sm text-danger-text">{error}</p>;
+  if (!data) return <p className="text-sm text-text-mute">Opening the guard file…</p>;
   const trace = data.decision?.trace;
   const brief = trace ? buildBrief(trace) : null;
   const pdf = (data.invoice.pdfPath ?? "/demos/partial.pdf").replace(/^\/uploads\//, "/api/files/");
@@ -79,18 +79,18 @@ export function Workbench({ id }: { id: string }) {
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-      <section className="overflow-hidden rounded-none border border-[#C5D0D8] bg-[#FBFCFA]">
-        <div className="flex items-center justify-between border-b border-[#C5D0D8] px-4 py-2">
+      <section className="overflow-hidden rounded-none border border-glass-border bg-glass">
+        <div className="flex items-center justify-between border-b border-glass-border px-4 py-2">
           <div>
             <div className="text-sm font-semibold">{brief?.kindLabel ?? "Document"}</div>
-            <div className="text-[11px] text-[#4B5963]">
+            <div className="text-[11px] text-text-mute">
               {data.invoice.invoiceNumber ?? "Source as uploaded"}
             </div>
           </div>
           <div className="flex items-center gap-2">
             <a
               href={`/api/invoices/${id}/audit?format=csv`}
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-none px-2 text-xs font-medium text-[#4B5963] hover:bg-[#E6ECE3] hover:text-[#1F2A44]"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-none px-2 text-xs font-medium text-text-mute hover:bg-muted hover:text-foreground"
               title="Download the audit trail for this invoice"
             >
               <Download className="h-3.5 w-3.5" aria-hidden /> Audit trail
@@ -103,7 +103,7 @@ export function Workbench({ id }: { id: string }) {
             title="Invoice image"
             src={pdf}
             alt="Uploaded invoice"
-            className="h-[72vh] w-full bg-[#111] object-contain"
+            className="h-[72vh] w-full bg-void object-contain"
           />
         ) : (
           <iframe title="Invoice PDF" src={pdf} className="h-[72vh] w-full bg-white" />
@@ -117,20 +117,20 @@ export function Workbench({ id }: { id: string }) {
               <h1 className="font-display max-w-[17ch] text-[2.3rem] leading-[1.08]">{brief.analystHeadline ?? brief.verb}</h1>
               <StatusBadge big value={data.decision?.final ?? data.decision?.recommendation ?? data.invoice.status} />
             </div>
-            <p className="mt-3 flex flex-wrap items-baseline gap-x-5 text-[#4B5963]">
-              <span className="font-display text-[1.7rem] text-[#1F2A44] tabular">{brief.amount}</span>
+            <p className="mt-3 flex flex-wrap items-baseline gap-x-5 text-text-mute">
+              <span className="font-display text-[1.7rem] text-foreground tabular">{brief.amount}</span>
               <span>{brief.howSure}</span>
               {brief.analystModel && brief.analystModel !== "engine" && (
                 <span className="text-sm">Memo by {brief.analystModel}. The decision comes from the rules.</span>
               )}
             </p>
             {brief.analystSoWhat && (
-              <p className="font-display mt-5 max-w-[40ch] border-l-4 border-[#B3261E] pl-4 text-[1.25rem] leading-snug">
+              <p className="font-display mt-5 max-w-[40ch] border-l-4 border-danger pl-4 text-[1.25rem] leading-snug">
                 {brief.analystSoWhat}
               </p>
             )}
             <p className="mt-4 max-w-[62ch] leading-7">{brief.analystNote ?? brief.stance}</p>
-            <ul className="mt-3 max-w-[62ch] list-disc space-y-1 pl-5 text-[0.9375rem] text-[#4B5963]">
+            <ul className="mt-3 max-w-[62ch] list-disc space-y-1 pl-5 text-[0.9375rem] text-text-mute">
               {brief.why.map((w) => (
                 <li key={w}>{w}</li>
               ))}
@@ -139,33 +139,33 @@ export function Workbench({ id }: { id: string }) {
         )}
 
         {brief && (
-          <div className="border-t-2 border-[#1F2A44] pt-3">
+          <div className="border-t-2 border-neon-blue pt-3">
             <h2 className="font-display text-xl">What we read</h2>
             <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
               {brief.facts.map((f) => (
                 <div key={f.label}>
-                  <dt className="text-xs text-[#4B5963]">{f.label}</dt>
-                  <dd className={f.warn ? "font-medium text-[#9a4d12]" : "font-medium"}>{f.value}</dd>
+                  <dt className="text-xs text-text-mute">{f.label}</dt>
+                  <dd className={f.warn ? "font-medium text-warning-text" : "font-medium"}>{f.value}</dd>
                 </div>
               ))}
             </dl>
             {brief.parties.length > 0 && (
-              <div className="mt-4 border-t border-[#DDE5DB] pt-3">
-                <div className="text-xs text-[#4B5963]">Parties</div>
+              <div className="mt-4 border-t border-glass-border pt-3">
+                <div className="text-xs text-text-mute">Parties</div>
                 <ul className="mt-2 space-y-1 text-sm">
                   {brief.parties.map((p) => (
                     <li key={p.role + p.name}>
-                      <span className="text-[#4B5963]">{p.role}: </span>
+                      <span className="text-text-mute">{p.role}: </span>
                       {p.name}
-                      {p.taxId ? <span className="text-[#4B5963]"> · {p.taxId}</span> : null}
+                      {p.taxId ? <span className="text-text-mute"> · {p.taxId}</span> : null}
                     </li>
                   ))}
                 </ul>
               </div>
             )}
             {brief.slices.length > 1 && (
-              <div className="mt-4 border-t border-[#DDE5DB] pt-3">
-                <div className="text-xs text-[#4B5963]">
+              <div className="mt-4 border-t border-glass-border pt-3">
+                <div className="text-xs text-text-mute">
                   This file contains more than one bill
                 </div>
                 <ul className="mt-2 space-y-2">
@@ -173,7 +173,7 @@ export function Workbench({ id }: { id: string }) {
                     <li key={s.title + (s.invoiceNumber ?? "")} className="flex justify-between text-sm">
                       <span>
                         {s.title}
-                        <span className="block text-[11px] text-[#4B5963]">
+                        <span className="block text-[11px] text-text-mute">
                           {s.invoiceNumber} {s.note ? `· ${s.note}` : ""}
                         </span>
                       </span>
@@ -184,12 +184,12 @@ export function Workbench({ id }: { id: string }) {
               </div>
             )}
             {brief.extras.length > 0 && (
-              <div className="mt-4 border-t border-[#DDE5DB] pt-3">
-                <div className="text-xs text-[#4B5963]">Also on the page</div>
+              <div className="mt-4 border-t border-glass-border pt-3">
+                <div className="text-xs text-text-mute">Also on the page</div>
                 <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
                   {brief.extras.map((e) => (
                     <div key={e.label}>
-                      <dt className="text-[#4B5963]">{e.label}</dt>
+                      <dt className="text-text-mute">{e.label}</dt>
                       <dd>{e.value}</dd>
                     </div>
                   ))}
@@ -200,14 +200,14 @@ export function Workbench({ id }: { id: string }) {
         )}
 
         {brief && brief.lines.length > 0 && (
-          <div className="border-t-2 border-[#1F2A44] pt-3">
+          <div className="border-t-2 border-neon-blue pt-3">
             <h2 className="font-display text-xl">Lines</h2>
             <table className="mt-2 w-full text-sm">
               <tbody>
                 {brief.lines.map((l) => (
-                  <tr key={l.description} className="border-t border-[#DDE5DB]">
+                  <tr key={l.description} className="border-t border-glass-border">
                     <td className="py-2">{l.description}</td>
-                    <td className="py-2 text-[#4B5963]">×{l.qty}</td>
+                    <td className="py-2 text-text-mute">×{l.qty}</td>
                     <td className="py-2 text-right tabular">{l.amount}</td>
                   </tr>
                 ))}
@@ -217,10 +217,10 @@ export function Workbench({ id }: { id: string }) {
         )}
 
         {trace && (
-          <div className="border-t-2 border-[#1F2A44] pt-3">
-            <h2 className="font-display text-xl">Purchase-order check</h2>
+          <div className="border-t-2 border-neon-blue pt-3">
+            <h2 className="font-display text-xl">Overpayment check (purchase orders)</h2>
             {trace.normalized.fx?.missing && (
-              <p className="mt-2 text-sm text-[#9a4d12]">
+              <p className="mt-2 text-sm text-warning-text">
                 No published {trace.normalized.fx.pair} rate. Left in{" "}
                 {trace.normalized.originalCurrency} — we did not call ₹1 equal to $1.
               </p>
@@ -228,7 +228,7 @@ export function Workbench({ id }: { id: string }) {
             {trace.normalized.fx &&
               !trace.normalized.fx.missing &&
               trace.normalized.fx.source !== "identity" && (
-                <p className="mt-2 text-sm text-[#4B5963]">
+                <p className="mt-2 text-sm text-text-mute">
                   Converted {trace.normalized.originalCurrency} {trace.normalized.originalTotal} to{" "}
                   {money(trace.normalized.comparableAmount, trace.normalized.comparableCurrency)} at{" "}
                   {trace.normalized.fx.rate} on {trace.normalized.fx.asOf}.
@@ -236,16 +236,16 @@ export function Workbench({ id }: { id: string }) {
               )}
             <div className="mt-3 space-y-2">
               {trace.match.allocations.map((a) => (
-                <div key={a.poNumber} className="border border-[#C5D0D8] bg-[#FBFCFA] p-3 text-sm">
+                <div key={a.poNumber} className="border border-glass-border bg-glass p-3 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="font-medium">{a.poNumber}</span>
                     <StatusBadge value={a.status} />
                   </div>
-                  <p className="mt-1 text-[#4B5963]">{a.evidence}</p>
+                  <p className="mt-1 text-text-mute">{a.evidence}</p>
                 </div>
               ))}
               {!trace.match.allocations.length && (
-                <p className="text-sm text-[#4B5963]">
+                <p className="text-sm text-text-mute">
                   {trace.extraction.documentKind === "mixed_pack" ||
                   trace.extraction.documentKind === "marketplace_invoice"
                     ? "Marketplace food bill — we do not match these to a purchase order. The order number on the page is the reference."
@@ -257,8 +257,8 @@ export function Workbench({ id }: { id: string }) {
         )}
 
         {brief && (
-          <div className="border-t-2 border-[#1F2A44] pt-3">
-            <h2 className="font-display text-xl">Checks run</h2>
+          <div className="border-t-2 border-neon-blue pt-3">
+            <h2 className="font-display text-xl">Guard checks run</h2>
             <ul className="mt-2 space-y-2">
               {brief.checks.map((c) => (
                 <li key={c.label} className="flex items-start gap-2 text-sm">
@@ -271,24 +271,24 @@ export function Workbench({ id }: { id: string }) {
         )}
 
         {data.invoice.status === "suspended" && brief && (
-          <div className="border-l-4 border-[#B45309] bg-[#FBFCFA] p-4">
-            <h2 className="font-display text-xl">What we need from you</h2>
+          <div className="border-l-4 border-warning bg-glass p-4">
+            <h2 className="font-display text-xl">A person needs to clear this before money moves</h2>
             <ul className="mt-2 list-disc pl-5 text-sm">
               {brief.ask.map((c) => (
                 <li key={c}>{c}</li>
               ))}
             </ul>
             <textarea
-              className="mt-3 w-full rounded-none border border-[#C5D0D8] bg-white p-2 text-sm"
+              className="mt-3 w-full rounded-md border border-input bg-void p-2 text-sm text-foreground"
               rows={2}
               placeholder="Note for the file (optional)"
               value={note}
               onChange={(e) => setNote(e.target.value)}
             />
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button onClick={() => void resume("approve")}>Agree — pay as proposed</Button>
+              <Button onClick={() => void resume("approve")}>Release as proposed</Button>
               <Button variant="outline" onClick={() => void resume("override", "auto_approve")}>
-                Override — pay in full
+                Override and release in full
               </Button>
               <Button variant="danger" onClick={() => void resume("reject")}>
                 Do not pay
@@ -297,9 +297,9 @@ export function Workbench({ id }: { id: string }) {
           </div>
         )}
 
-        <details className="rounded-none border border-[#C5D0D8] bg-[#F1F4EF] p-4 text-sm">
-          <summary className="cursor-pointer font-medium">Audit trail (for the file, not the meeting)</summary>
-          <ol className="mt-3 space-y-1 text-[#4B5963]">
+        <details className="rounded-none border border-glass-border bg-glass p-4 text-sm">
+          <summary className="cursor-pointer font-medium">Guard log (for the file, not the meeting)</summary>
+          <ol className="mt-3 space-y-1 text-text-mute">
             {data.events.map((e) => (
               <li key={e.id}>
                 {e.at.slice(11, 19)} · {e.step} · {e.status}

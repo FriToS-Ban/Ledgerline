@@ -1,46 +1,80 @@
 @import "tailwindcss";
 
 /*
-  Ledgerline — the look of an accounts ledger: ruled paper, a red margin line, tabular columns,
-  and rubber-stamped decisions. Rectilinear on purpose (ledgers have no rounded corners).
+  Ledgerline Cosmic: dark deep-space, neon blue/violet with a cyan accent, glass surfaces with
+  glow borders. Dark theme only. Legacy ledger token names (--paper, --ink, ...) are kept as
+  aliases so existing markup keeps working. Spacing scale: 4/8/12/16/24/32.
 */
 :root {
-  --paper: #F1F4EF;
-  --sheet: #FBFCFA;
-  --bar: #E6ECE3;        /* green-bar ledger stripe */
-  --ink: #1F2A44;        /* blue-black fountain-pen ink */
-  --mute: #4B5963;
-  --rule: #C5D0D8;       /* ruled lines */
-  --margin: #B3261E;     /* the red margin rule, and "do not pay" */
-  --paid: #1E7F5C;
-  --hold: #B45309;
-  --part: #2F4F8F;
+  color-scheme: dark;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-6: 24px; --space-8: 32px;
 
-  /* shadcn/ui semantic tokens, mapped onto the same palette */
-  --background: var(--paper);
-  --foreground: var(--ink);
-  --card: var(--sheet);
-  --card-foreground: var(--ink);
-  --popover: var(--sheet);
-  --popover-foreground: var(--ink);
-  --primary: var(--ink);
-  --primary-foreground: #FBFCFA;
-  --secondary: var(--bar);
-  --secondary-foreground: var(--ink);
-  --muted: var(--bar);
-  --muted-foreground: var(--mute);
-  --accent: var(--bar);
-  --accent-foreground: var(--ink);
-  --destructive: var(--margin);
-  --border: var(--rule);
-  --input: #AEBBC6;
-  --ring: var(--part);
-  --radius: 0.125rem;
-  --chart-1: var(--part);
-  --chart-2: var(--paid);
-  --chart-3: var(--hold);
-  --chart-4: var(--margin);
-  --chart-5: #6B7A86;
+  --void: #05060F;
+  --space: #0A0D1F;
+  --nebula: #11142B;
+  --text: #E8ECFF;          /* ~15:1 on --void */
+  --text-mute: #A9B2D3;     /* ~9:1 on --void */
+  --neon-blue: #3B82F6;
+  --neon-violet: #8B5CF6;
+  --neon-cyan: #22D3EE;
+  --success: #16A34A;
+  --warning: #D97706;
+  --danger: #DC2626;
+  /* readable-on-dark text variants of the semantic colours (>= 4.5:1 on --void and --glass) */
+  --success-text: #4ADE80;
+  --ok-text: #4ADE80;   /* non-self-referential alias for sonner */
+  --bad-text: #F87171;
+  --warning-text: #FBBF24;
+  --danger-text: #F87171;
+  --blue-text: #7DB1FF;
+  --violet-text: #B79CFF;
+
+  --glass: rgba(17, 20, 43, 0.62);
+  --glass-strong: rgba(17, 20, 43, 0.86);
+  --glass-border: rgba(139, 160, 255, 0.22);
+  --glow-blue: 0 0 0 1px rgba(59, 130, 246, 0.35), 0 0 24px rgba(59, 130, 246, 0.28);
+  --glow-violet: 0 0 0 1px rgba(139, 92, 246, 0.35), 0 0 24px rgba(139, 92, 246, 0.28);
+  --glow-cyan: 0 0 0 1px rgba(34, 211, 238, 0.35), 0 0 20px rgba(34, 211, 238, 0.25);
+  --shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --gradient-neon: linear-gradient(135deg, var(--neon-blue), var(--neon-violet));
+
+  /* legacy aliases */
+  --paper: var(--void);
+  --sheet: var(--space);
+  --bar: rgba(139, 160, 255, 0.07);
+  --ink: var(--text);
+  --mute: var(--text-mute);
+  --rule: var(--glass-border);
+  --margin: var(--danger-text);
+  --paid: var(--success-text);
+  --hold: var(--warning-text);
+  --part: var(--blue-text);
+
+  /* shadcn/ui semantic tokens */
+  --background: var(--void);
+  --foreground: var(--text);
+  --card: var(--glass);
+  --card-foreground: var(--text);
+  --popover: #0E1229;
+  --popover-foreground: var(--text);
+  --primary: var(--neon-blue);
+  --primary-foreground: #05060F;   /* ~5.6:1 on neon blue */
+  --secondary: rgba(139, 92, 246, 0.18);
+  --secondary-foreground: var(--text);
+  --muted: rgba(139, 160, 255, 0.1);
+  --muted-foreground: var(--text-mute);
+  --accent: rgba(34, 211, 238, 0.14);
+  --accent-foreground: var(--text);
+  --destructive: var(--danger);
+  --border: var(--glass-border);
+  --input: #6B78B0;   /* >= 3:1 against the void/glass background */
+  --ring: var(--neon-cyan);
+  --radius: 0.75rem;
+  --chart-1: var(--neon-blue);
+  --chart-2: var(--success-text);
+  --chart-3: var(--warning-text);
+  --chart-4: var(--danger-text);
+  --chart-5: var(--neon-violet);
 }
 
 @theme inline {
@@ -66,98 +100,177 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
   --radius-lg: var(--radius);
-  --radius-md: var(--radius);
-  --radius-sm: var(--radius);
-  --color-background: var(--paper);
-  --color-foreground: var(--ink);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-neon-blue: var(--neon-blue);
+  --color-neon-violet: var(--neon-violet);
+  --color-neon-cyan: var(--neon-cyan);
+  --color-success: var(--success);
+  --color-success-text: var(--success-text);
+  --color-warning: var(--warning);
+  --color-warning-text: var(--warning-text);
+  --color-danger: var(--danger);
+  --color-danger-text: var(--danger-text);
+  --color-glass: var(--glass);
+  --color-glass-border: var(--glass-border);
   --font-sans: var(--font-body);
-  --font-display: var(--font-heading);
-  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-audiowide);
+  --font-mono: var(--font-jetbrains);
+  --color-void: var(--void);
+  --color-space: var(--space);
+  --color-nebula: var(--nebula);
+  --color-blue-text: var(--blue-text);
+  --color-violet-text: var(--violet-text);
+  --color-text-mute: var(--text-mute);
 }
 
 * { box-sizing: border-box; }
 
 html, body {
-  background: var(--paper);
-  color: var(--ink);
+  background-color: var(--void);
+  color: var(--text);
   font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.55;
   min-height: 100%;
 }
-
-body { margin: 0; }
+body {
+  margin: 0;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 15% -10%, rgba(59, 130, 246, 0.18), transparent 60%),
+    radial-gradient(ellipse 70% 45% at 95% 0%, rgba(139, 92, 246, 0.16), transparent 60%);
+  background-attachment: fixed;
+}
 
 h1, h2, h3, .font-display {
-  font-family: var(--font-heading), Georgia, serif;
-  font-weight: 500;
-  letter-spacing: -0.015em;
+  font-family: var(--font-audiowide), var(--font-body), sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.01em;
 }
 
 a { color: inherit; text-decoration: none; }
 button { font: inherit; }
 button, [role="button"], label[for], summary, select, input[type="file"] { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
+::selection { background: rgba(139, 92, 246, 0.45); color: #fff; }
 
-:focus-visible { outline: 2px solid var(--part); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--neon-cyan); outline-offset: 2px; }
 
-.tabular { font-variant-numeric: tabular-nums; }
+.tabular { font-variant-numeric: tabular-nums; font-family: var(--font-jetbrains), ui-monospace, monospace; }
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: var(--radius);
+}
+.glow-blue { box-shadow: var(--glow-blue); }
+.glow-violet { box-shadow: var(--glow-violet); }
+.glow-cyan { box-shadow: var(--glow-cyan); }
+.neon-text {
+  background: var(--gradient-neon);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
 
-/* ---------- the ledger ---------- */
+/* ---------- CSS-only starfield: the reduced-motion / no-WebGL sky, and the base under the 3D layer ---------- */
+.starfield {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1px 1px at 23px 41px, var(--text), transparent 70%),
+    radial-gradient(1px 1px at 151px 113px, var(--text-mute), transparent 70%),
+    radial-gradient(1.5px 1.5px at 97px 187px, var(--blue-text), transparent 70%),
+    radial-gradient(1px 1px at 211px 29px, var(--text), transparent 70%),
+    radial-gradient(1.5px 1.5px at 61px 259px, var(--violet-text), transparent 70%),
+    radial-gradient(1px 1px at 283px 211px, var(--text-mute), transparent 70%),
+    radial-gradient(2px 2px at 331px 97px, var(--neon-cyan), transparent 70%),
+    radial-gradient(1px 1px at 173px 317px, var(--text), transparent 70%);
+  background-size: 240px 240px, 310px 310px, 270px 270px, 390px 390px, 350px 350px, 290px 290px, 520px 520px, 430px 430px;
+  opacity: 0.55;
+  animation: starfield-twinkle 7s ease-in-out infinite alternate;
+}
+.starfield::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 45% 35% at 12% 70%, color-mix(in srgb, var(--neon-violet) 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 88% 30%, color-mix(in srgb, var(--neon-blue) 10%, transparent), transparent 70%);
+}
+@keyframes starfield-twinkle { from { opacity: 0.4; } to { opacity: 0.65; } }
+
+/* the floating nav scroller: fade the clipped edges on small screens */
+.nav-scroll {
+  scrollbar-width: none;
+  mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
+}
+.nav-scroll::-webkit-scrollbar { display: none; }
+
+/* ---------- the ledger (now a glass data panel) ---------- */
 .ledger {
-  background: var(--sheet);
-  border: 1px solid var(--rule);
-  border-left: 3px solid var(--margin); /* margin rule */
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--neon-violet);
+  border-radius: var(--radius);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-panel);
+  overflow-x: auto;
 }
 .ledger table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
 .ledger thead th {
   text-align: left;
   font-weight: 500;
   font-size: 0.8125rem;
-  color: var(--mute);
-  padding: 0.5rem 0.9rem;
-  border-bottom: 2px solid var(--ink);
+  letter-spacing: 0.04em;
+  color: var(--text-mute);
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--neon-blue);
   white-space: nowrap;
 }
-.ledger tbody td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+.ledger tbody td { padding: 12px 16px; border-bottom: 1px solid var(--glass-border); vertical-align: middle; }
 .ledger tbody tr:nth-child(even) { background: var(--bar); }
 .ledger tbody tr[data-href] { cursor: pointer; }
-.ledger tbody tr[data-href]:hover { background: #DDE6D9; }
-.ledger .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ledger tbody tr[data-href]:hover { background: rgba(59, 130, 246, 0.16); }
+.ledger .num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-jetbrains), ui-monospace, monospace; }
 
-/* ---------- the rubber stamp: the one memorable thing ---------- */
+/* ---------- the stamp: a neon status chip ---------- */
 .stamp {
-  --c: var(--ink);
+  --c: var(--blue-text);
   display: inline-block;
-  font-family: var(--font-stamp), var(--font-body), sans-serif;
-  font-weight: 700;
-  font-size: 0.8125rem;
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-weight: 600;
+  font-size: 0.75rem;
   line-height: 1;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--c);
-  border: 2px solid var(--c);
-  padding: 0.3rem 0.5rem 0.25rem;
-  box-shadow: inset 0 0 0 1px var(--sheet), inset 0 0 0 2px color-mix(in srgb, var(--c) 55%, transparent);
-  opacity: 0.92;
-  mix-blend-mode: multiply;
+  border: 1px solid color-mix(in srgb, var(--c) 70%, transparent);
+  background: color-mix(in srgb, var(--c) 12%, transparent);
+  border-radius: 9999px;
+  padding: 6px 12px;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--c) 28%, transparent);
   white-space: nowrap;
-  transform: rotate(var(--tilt, 0deg));
 }
-.stamp.big { font-size: 1.5rem; padding: 0.55rem 0.9rem 0.45rem; border-width: 3px; --tilt: -3deg; }
-.stamp.paid { --c: var(--paid); }
-.stamp.part { --c: var(--part); }
-.stamp.hold { --c: var(--hold); }
-.stamp.void { --c: var(--margin); }
-.stamp.wait { --c: var(--mute); border-style: dashed; }
+.stamp.big { font-size: 1.125rem; padding: 12px 24px; border-width: 2px; font-family: var(--font-audiowide), var(--font-jetbrains), sans-serif; }
+.stamp.paid { --c: var(--success-text); }
+.stamp.part { --c: var(--blue-text); }
+.stamp.hold { --c: var(--warning-text); }
+.stamp.void { --c: var(--danger-text); }
+.stamp.wait { --c: var(--text-mute); border-style: dashed; box-shadow: none; }
 
-/* a single entrance: the stamp lands when a case opens (answers the action of opening it) */
-@keyframes thud { from { opacity: 0; transform: rotate(var(--tilt, 0deg)) scale(1.5); } to { opacity: 0.92; transform: rotate(var(--tilt, 0deg)) scale(1); } }
+/* a single entrance: the badge lands when a case opens */
+@keyframes thud { from { opacity: 0; transform: scale(1.35); } to { opacity: 1; transform: scale(1); } }
 .stamp.big { animation: thud 260ms cubic-bezier(.2,.8,.3,1) both; }
 
 /* prose figures in the headline sentence */
-.fig { font-family: var(--font-heading), Georgia, serif; font-variant-numeric: lining-nums tabular-nums; }
+.fig { font-family: var(--font-jetbrains), ui-monospace, monospace; font-variant-numeric: lining-nums tabular-nums; }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }

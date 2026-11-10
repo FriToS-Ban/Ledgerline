@@ -9,8 +9,11 @@ import { saveUpload } from "@/lib/extract/save-upload";
 import { enqueue } from "@/lib/queue/jobs";
 import { drainQueue } from "@/lib/queue/worker";
 import type { DemoId } from "@/lib/fixtures/cases";
+import { requireSignedIn } from "@/lib/auth/users";
 
 export async function POST(req: NextRequest) {
+  const unauth = await requireSignedIn();
+  if (unauth) return unauth;
   await seedDatabase();
   const contentType = req.headers.get("content-type") ?? "";
   let demoId: DemoId | undefined;

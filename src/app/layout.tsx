@@ -1,23 +1,21 @@
 import type { Metadata } from "next";
-import { Geist_Mono, IBM_Plex_Sans, IBM_Plex_Sans_Condensed, Spectral } from "next/font/google";
+import { Audiowide, Inter, JetBrains_Mono } from "next/font/google";
 import { Shell } from "@/components/shell";
 import "./globals.css";
 
-// Spectral: a bookish serif for headlines and figures. Plex Sans: the working interface.
-// Plex Condensed: only for the rubber stamps.
-const heading = Spectral({ variable: "--font-heading", subsets: ["latin"], weight: ["400", "500", "600"], display: "swap" });
-const body = IBM_Plex_Sans({ variable: "--font-body", subsets: ["latin"], weight: ["400", "500", "600"], display: "swap" });
-const stamp = IBM_Plex_Sans_Condensed({ variable: "--font-stamp", subsets: ["latin"], weight: ["700"], display: "swap" });
-const mono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+// Audiowide: display headings. Inter: readable working interface. JetBrains Mono: numbers and code.
+const display = Audiowide({ variable: "--font-audiowide", subsets: ["latin"], weight: "400", display: "swap" });
+const body = Inter({ variable: "--font-body", subsets: ["latin"], display: "swap" });
+const mono = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Ledgerline — Invoice decisions",
-  description: "From PDF to a defendable AP decision, with every step visible.",
+  title: "Ledgerline — the payment guard",
+  description: "Catch duplicate, overpaid and suspicious invoices before money leaves.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${heading.variable} ${body.variable} ${stamp.variable} ${mono.variable} h-full antialiased`}>
+    <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable} h-full antialiased`}>
       <body className="min-h-full">
         <Shell>{children}</Shell>
       </body>

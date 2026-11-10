@@ -3,11 +3,14 @@ import { asc, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import type { PipelineTrace } from "@/lib/invoice/schema";
+import { requireSignedIn } from "@/lib/auth/users";
 
 const q = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
 
 /** Controller-ready audit trail for one invoice: ?format=json (default) or csv. */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const unauth = await requireSignedIn();
+  if (unauth) return unauth;
   const { id } = await ctx.params;
   const db = getDb();
   const [invoice] = await db.select().from(t.invoices).where(eq(t.invoices.id, id));

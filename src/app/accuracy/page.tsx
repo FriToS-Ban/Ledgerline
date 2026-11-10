@@ -42,10 +42,10 @@ export default function AccuracyPage() {
     return (
       <div>
         <h1 className="font-display max-w-[18ch] text-[2.6rem] leading-[1.1]">Not tested yet.</h1>
-        <p className="mt-4 max-w-[50ch] text-[#4B5963]">
-          We check ourselves against invoices where the right answer is known. Load the Friday demo from the{" "}
+        <p className="mt-4 max-w-[50ch] text-text-mute">
+          The guard is tested against invoices where the right answer is known. Load the Friday demo from the{" "}
           <Link href="/" className="underline underline-offset-4">
-            first page
+            Command page
           </Link>
           , start the worker, then come back.
         </p>
@@ -58,8 +58,8 @@ export default function AccuracyPage() {
       <section>
         <h1 className="font-display max-w-[22ch] text-[2.6rem] leading-[1.1] sm:text-[3.2rem]">
           {a.wronglyPaid === 0
-            ? `Nothing was paid that should have been stopped.`
-            : `${a.wronglyPaid} invoice${a.wronglyPaid === 1 ? "" : "s"} would have been paid wrongly.`}
+            ? `The guard let nothing bad through.`
+            : `${a.wronglyPaid} invoice${a.wronglyPaid === 1 ? "" : "s"} slipped past the guard and would have been paid wrongly.`}
         </h1>
         <p className="font-display mt-5 max-w-[38ch] text-[1.4rem] leading-snug sm:text-[1.6rem]">
           Across {a.scored} test invoices we made the expected call {a.correct} times. {a.sentToHuman} went to a person
@@ -68,8 +68,8 @@ export default function AccuracyPage() {
       </section>
 
       {a.misses.length > 0 && (
-        <section className="border-l-4 border-[#B3261E] bg-[#FBFCFA] p-4">
-          <h2 className="font-display text-xl">Where we disagreed with the answer key</h2>
+        <section className="border-l-4 border-danger bg-glass p-4">
+          <h2 className="font-display text-xl">Where the guard disagreed with the answer key</h2>
           <ul className="mt-2 space-y-1 text-[0.9375rem]">
             {a.misses.map((m) => (
               <li key={m.invoiceId}>
@@ -85,19 +85,19 @@ export default function AccuracyPage() {
 
       <div className="grid gap-12 lg:grid-cols-2">
         <section>
-          <h2 className="font-display border-b-2 border-[#1F2A44] pb-1 text-2xl">Reading the page</h2>
-          <p className="mt-2 text-sm text-[#4B5963]">Did we pull the right value off the PDF?</p>
+          <h2 className="font-display border-b-2 border-neon-blue pb-1 text-2xl">Reading the page</h2>
+          <p className="mt-2 text-sm text-text-mute">Did we pull the right value off the PDF?</p>
           <ul className="mt-4 space-y-4">
             {a.extraction.map((f) => (
               <li key={f.field}>
                 <div className="flex justify-between gap-4 text-[0.9375rem]">
                   <span>{FIELD[f.field] ?? f.field}</span>
-                  <span className="tabular text-[#4B5963]">
+                  <span className="tabular text-text-mute">
                     {f.correct} of {f.total}
                   </span>
                 </div>
-                <div className="mt-1 h-2 bg-[#DDE5DB]" role="img" aria-label={`${FIELD[f.field] ?? f.field}: ${Math.round(f.rate * 100)} percent correct`}>
-                  <div className="h-full bg-[#1F2A44]" style={{ width: `${f.rate * 100}%` }} />
+                <div className="mt-1 h-2 bg-muted" role="img" aria-label={`${FIELD[f.field] ?? f.field}: ${Math.round(f.rate * 100)} percent correct`}>
+                  <div className="h-full bg-neon-blue" style={{ width: `${f.rate * 100}%` }} />
                 </div>
               </li>
             ))}
@@ -105,7 +105,7 @@ export default function AccuracyPage() {
         </section>
 
         <section>
-          <h2 className="font-display border-b-2 border-[#1F2A44] pb-1 text-2xl">By kind of invoice</h2>
+          <h2 className="font-display border-b-2 border-neon-blue pb-1 text-2xl">By kind of invoice</h2>
           <div className="ledger mt-4">
             <table>
               <thead>
@@ -133,8 +133,8 @@ export default function AccuracyPage() {
         </section>
       </div>
 
-      <section className="max-w-[62ch] border-t border-[#C5D0D8] pt-5 text-[0.9375rem] text-[#4B5963]">
-        <h2 className="font-display text-xl text-[#1F2A44]">Before you quote these numbers</h2>
+      <section className="max-w-[62ch] border-t border-glass-border pt-5 text-[0.9375rem] text-text-mute">
+        <h2 className="font-display text-xl text-foreground">Before you quote these numbers</h2>
         <p className="mt-2">
           We generated these invoices ourselves in a clean digital layout, so reading accuracy here is the best case. Real
           vendor PDFs and phone photos will score lower. What this page proves is the method and the safety check. Run it on a

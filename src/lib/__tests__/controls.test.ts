@@ -24,12 +24,12 @@ describe("sessions and passwords", () => {
     expect(readToken(t)).toBeNull();
     vi.useRealTimers();
   });
-  it("hashes passwords with a salt and verifies them", () => {
-    const h = hashPassword("s3cret");
+  it("hashes passwords with a salt and verifies them", async () => {
+    const h = await hashPassword("s3cret");
     expect(h).not.toContain("s3cret");
-    expect(verifyPassword("s3cret", h)).toBe(true);
-    expect(verifyPassword("wrong", h)).toBe(false);
-    expect(hashPassword("s3cret")).not.toBe(h);
+    expect(await verifyPassword("s3cret", h)).toBe(true);
+    expect(await verifyPassword("wrong", h)).toBe(false);
+    expect(await hashPassword("s3cret")).not.toBe(h);
   });
 });
 

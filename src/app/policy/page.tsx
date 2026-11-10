@@ -26,9 +26,9 @@ export default function PolicyPage() {
   return (
     <div className="max-w-2xl space-y-8">
       <section>
-        <h1 className="font-display max-w-[20ch] text-[2.6rem] leading-[1.1] sm:text-[3.2rem]">House rules.</h1>
-        <p className="mt-4 max-w-[52ch] text-[#4B5963]">
-          Every pay or hold cites the number that applied. Change a value and click away to save it.
+        <h1 className="font-display max-w-[20ch] text-[2.6rem] leading-[1.1] sm:text-[3.2rem]">Guard rules.</h1>
+        <p className="mt-4 max-w-[52ch] text-text-mute">
+          These are the lines the guard will not let money cross. Every release or hold cites the number that applied. Change a value and click away to save it.
         </p>
       </section>
       <div className="ledger">
@@ -42,7 +42,7 @@ export default function PolicyPage() {
                 <td className="num">
                   <input
                     id={r.key}
-                    className="w-28 border border-[#C5D0D8] bg-[#FBFCFA] px-2 py-1 text-right tabular focus-visible:outline-2 focus-visible:outline-[#1F2A44]"
+                    className="w-28 rounded-md border border-input bg-void px-2 py-1 text-right text-foreground tabular focus-visible:outline-2 focus-visible:outline-neon-cyan"
                     defaultValue={r.value}
                     onBlur={(e) => e.target.value !== r.value && void save(r.key, e.target.value)}
                   />
