@@ -41,6 +41,8 @@ export const users = pgTable("users", {
   role: text("role").notNull().default("clerk"),
   createdAt: createdAt(),
   passwordChangedAt: tstz("password_changed_at"),
+  /** Bumped on password change / "sign out everywhere"; a JWT carrying an older value is rejected. */
+  tokenVersion: integer("token_version").notNull().default(0),
 });
 
 export const accounts = pgTable(
@@ -108,22 +110,7 @@ export const invites = pgTable(
   (i) => [index("invites_org_id").on(i.orgId), index("invites_email").on(i.email)],
 );
 
-/* ---------------------------- custom sessions + sign-in throttle (epoch ms) */
-
-export const authSessions = pgTable(
-  "auth_sessions",
-  {
-    idHash: text("id_hash").primaryKey(),
-    email: text("email").notNull().references(() => users.email, { onDelete: "cascade", onUpdate: "cascade" }),
-    createdAt: bigint("created_at", { mode: "number" }).notNull(),
-    lastSeenAt: bigint("last_seen_at", { mode: "number" }).notNull(),
-    expiresAt: bigint("expires_at", { mode: "number" }).notNull(),
-    revokedAt: bigint("revoked_at", { mode: "number" }),
-    ip: text("ip"),
-    userAgent: text("user_agent"),
-  },
-  (s) => [index("auth_sessions_email").on(s.email), index("auth_sessions_expires").on(s.expiresAt)],
-);
+/* ---------------------------- sign-in throttle (epoch ms) */
 
 export const authThrottle = pgTable(
   "auth_throttle",
