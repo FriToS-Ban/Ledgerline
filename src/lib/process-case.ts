@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import { loadFx, loadHistory, loadOpenPos, loadPolicy, loadCorrections, situationFingerprint, vendorApproved } from "@/lib/domain";
 import { runPipeline } from "@/lib/invoice/pipeline";
-import type { PipelineTrace } from "@/lib/invoice/schema";
+import { decisionEnum, type PipelineTrace } from "@/lib/invoice/schema";
 import { extractInvoice } from "@/lib/pdf/extract";
 import type { DemoId } from "@/lib/fixtures/cases";
 import { DEMO_CASES } from "@/lib/fixtures/cases";
@@ -267,6 +267,16 @@ export async function processCase(opts: {
   return { trace, needsHuman: trace.decision.needsHuman };
 }
 
+/** The decision is missing, already finalized, or the requested outcome is invalid. */
+export class ResumeError extends Error {
+  constructor(
+    public readonly kind: "not-found" | "already-final" | "invalid",
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 export async function resumeCase(opts: {
   orgId: string;
   invoiceId: string;
@@ -275,65 +285,74 @@ export async function resumeCase(opts: {
   note?: string;
   by?: string;
 }) {
-  const db = getDb();
   const { orgId } = opts;
-  const [decision] = await db
-    .select()
-    .from(t.decisions)
-    .where(and(eq(t.decisions.orgId, orgId), eq(t.decisions.invoiceId, opts.invoiceId)));
-  if (!decision) throw new Error("No decision to resume");
-  const trace = JSON.parse(decision.trace) as PipelineTrace;
-  const human =
-    opts.action === "reject"
-      ? "reject"
-      : opts.action === "override"
-        ? (opts.override ?? "escalate")
-        : opts.override ??
-          (trace.decision.recommendation === "reject" ? "auto_approve" : trace.decision.recommendation);
-
-  const fingerprint = situationFingerprint({
-    vendor: trace.extraction.vendorName,
-    method: trace.match.method,
-    rules: trace.rules.filter((r) => r.outcome === "fail").map((r) => r.ruleId),
-  });
-  if (human !== decision.recommendation) {
-    await db.insert(t.decisionCorrections).values({
-    orgId,
-      id: randomUUID(),
-      fingerprint,
-      situation: `${trace.extraction.vendorName} ${trace.match.method}`,
-      original: decision.recommendation,
-      human,
-      note: opts.note ?? null,
-      createdAt: new Date(),
-    });
+  if (opts.override !== undefined && !decisionEnum.safeParse(opts.override).success) {
+    throw new ResumeError("invalid", "override must be one of auto_approve, partial_approve, escalate, reject");
   }
+  return getDb().transaction(async (tx) => {
+    const [decision] = await tx
+      .select()
+      .from(t.decisions)
+      .where(and(eq(t.decisions.orgId, orgId), eq(t.decisions.invoiceId, opts.invoiceId)));
+    if (!decision) throw new ResumeError("not-found", "No decision to resume");
+    const trace = JSON.parse(decision.trace) as PipelineTrace;
+    const human =
+      opts.action === "reject"
+        ? "reject"
+        : opts.action === "override"
+          ? (opts.override ?? "escalate")
+          : opts.override ??
+            (trace.decision.recommendation === "reject" ? "auto_approve" : trace.decision.recommendation);
 
-  if (human !== "reject") {
-    for (const a of trace.match.allocations) {
-      await db.insert(t.matches).values({
-    orgId,
+    // Atomic claim: only the caller that flips final from NULL proceeds; repeats and races get a conflict.
+    const claimed = await tx
+      .update(t.decisions)
+      .set({ final: human })
+      .where(and(eq(t.decisions.orgId, orgId), eq(t.decisions.id, decision.id), isNull(t.decisions.final)))
+      .returning({ id: t.decisions.id });
+    if (claimed.length !== 1) throw new ResumeError("already-final", "This invoice has already been decided.");
+
+    const fingerprint = situationFingerprint({
+      vendor: trace.extraction.vendorName,
+      method: trace.match.method,
+      rules: trace.rules.filter((r) => r.outcome === "fail").map((r) => r.ruleId),
+    });
+    if (human !== decision.recommendation) {
+      await tx.insert(t.decisionCorrections).values({
+        orgId,
         id: randomUUID(),
-        invoiceId: opts.invoiceId,
-        poId: a.poId,
-        amount: a.allocatedAmount,
-        method: trace.match.method,
-        status: human,
+        fingerprint,
+        situation: `${trace.extraction.vendorName} ${trace.match.method}`,
+        original: decision.recommendation,
+        human,
+        note: opts.note ?? null,
+        createdAt: new Date(),
       });
     }
-  }
-
-  await db
-    .update(t.decisions)
-    .set({ final: human })
-    .where(and(eq(t.decisions.orgId, orgId), eq(t.decisions.id, decision.id)));
-  await db
-    .update(t.invoices)
-    .set({ status: human })
-    .where(and(eq(t.invoices.orgId, orgId), eq(t.invoices.id, opts.invoiceId)));
-  await emit(orgId, opts.invoiceId, "review", "success", { human, note: opts.note ?? null, by: opts.by ?? null });
-  await emit(orgId, opts.invoiceId, "persist", "success", { status: human });
-  return { human };
+    if (human !== "reject") {
+      for (const a of trace.match.allocations) {
+        await tx.insert(t.matches).values({
+          orgId,
+          id: randomUUID(),
+          invoiceId: opts.invoiceId,
+          poId: a.poId,
+          amount: a.allocatedAmount,
+          method: trace.match.method,
+          status: human,
+        });
+      }
+    }
+    await tx
+      .update(t.invoices)
+      .set({ status: human })
+      .where(and(eq(t.invoices.orgId, orgId), eq(t.invoices.id, opts.invoiceId)));
+    const at = new Date();
+    await tx.insert(t.auditEvents).values([
+      { orgId, id: randomUUID(), invoiceId: opts.invoiceId, step: "review", status: "success", payload: JSON.stringify({ human, note: opts.note ?? null, by: opts.by ?? null }), at },
+      { orgId, id: randomUUID(), invoiceId: opts.invoiceId, step: "persist", status: "success", payload: JSON.stringify({ status: human }), at },
+    ]);
+    return { human };
+  });
 }
 
 export async function createInvoiceRecord(opts: {

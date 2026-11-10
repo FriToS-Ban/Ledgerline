@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
-import { processCase, resumeCase } from "@/lib/process-case";
+import { processCase, resumeCase, ResumeError } from "@/lib/process-case";
 import type { DemoId } from "@/lib/fixtures/cases";
 import type { JobRow } from "./jobs";
 import { getStorage, keyBelongsToOrg, readAll } from "@/lib/storage";
@@ -34,7 +34,12 @@ export async function runJob(job: JobRow) {
   const data = { ...JSON.parse(job.payload), orgId: job.orgId };
   if (job.kind === "process-invoice") return processInvoiceJob(data);
   if (job.kind === "resume-invoice") {
-    await resumeCase(data);
+    try {
+      await resumeCase(data);
+    } catch (e) {
+      if (e instanceof ResumeError && e.kind === "already-final") return; // a retried job must not fail the queue
+      throw e;
+    }
     return;
   }
   throw new Error(`unknown job kind ${job.kind}`);
