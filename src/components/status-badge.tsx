@@ -21,13 +21,13 @@ const KIND: Record<string, Kind> = {
 };
 
 const LABEL: Record<string, string> = {
-  auto_approve: "Pay",
+  auto_approve: "Release",
   approved: "Paid",
-  partial_approve: "Pay part",
+  partial_approve: "Release part",
   escalate: "Hold",
   suspended: "Needs a person",
-  reject: "Do not pay",
-  rejected: "Do not pay",
+  reject: "Block",
+  rejected: "Block",
   running: "Reading",
   queued: "Waiting",
   pass: "Clear",

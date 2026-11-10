@@ -19,7 +19,7 @@ npm run dev:inngest
 
 Optional live vision: set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Without a key, seeded fixtures and digital PDF parse still run; scanned pages fall back to Tesseract.
 
-Open http://localhost:3000 (the Command page) and run the Friday demo or a known threat.
+Open http://localhost:3000 (the Command page) and run the Friday demo from the Command page.
 
 ### Sign-in
 

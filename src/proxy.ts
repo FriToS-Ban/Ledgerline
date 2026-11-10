@@ -39,7 +39,7 @@ export function proxy(req: NextRequest) {
     if (pathname.startsWith("/api/")) return NextResponse.json({ error: "sign in required" }, { status: 401 });
     const url = new URL("/login", req.url);
     url.search = "";
-    url.searchParams.set("next", pathname);
+    url.searchParams.set("next", pathname + req.nextUrl.search);
     return NextResponse.redirect(url);
   }
   return next();

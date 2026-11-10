@@ -122,7 +122,7 @@ function AuthCard() {
     <div className="mx-auto grid min-h-screen w-full max-w-6xl items-center gap-10 px-5 py-10 lg:grid-cols-[1fr_28rem] lg:gap-16 lg:px-8">
       <div className="max-w-xl">
         <p className="font-display neon-text text-3xl tracking-wide">Ledgerline</p>
-        <h1 className="font-display mt-8 text-4xl leading-[1.1] sm:text-5xl">Should we pay this invoice?</h1>
+        <h1 className="font-display mt-8 text-4xl leading-[1.1] sm:text-5xl">Release, hold or block every payment.</h1>
         <p className="mt-5 max-w-[46ch] text-lg text-text-mute">
           Every invoice is read, matched to its purchase order and checked against your rules. You see the answer and the
           reasons, and a person signs off on anything unsure.

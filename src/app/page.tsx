@@ -91,7 +91,7 @@ export default function CommandPage() {
 
   const stopped = m.money.held + m.money.blocked;
   const stats = [
-    { label: "Overpayments prevented", value: usd(stopped), note: `${usd(m.money.held)} held, ${usd(m.money.blocked)} blocked`, tone: "text-danger-text" },
+    { label: "Stopped before payment", value: usd(stopped), note: `${usd(m.money.held)} held, ${usd(m.money.blocked)} blocked`, tone: "text-danger-text" },
     { label: "Duplicates caught", value: String(m.duplicatesCaught), note: m.duplicatesCaught === 0 ? "No re-sent invoices so far" : "Re-sent invoices stopped before payment", tone: "text-warning-text" },
     { label: "Held for review", value: String(m.waitingForPerson), note: m.waitingForPerson === 0 ? "Nobody is waiting" : "Waiting for a person to look", tone: "text-blue-text" },
   ];

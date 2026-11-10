@@ -7,6 +7,7 @@ import { LogOut, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
 import { Flyers } from "@/components/scene";
+import { safeNext } from "@/lib/auth/safe-next";
 
 const NAV = [
   { href: "/", label: "Command" },
@@ -99,9 +100,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
     if (isLogin) return;
     void fetch("/api/auth/me")
       .then((r) => r.json())
-      .then((d) => setMe(d.user ?? null))
+      .then((d) => {
+        setMe(d.user ?? null);
+        if (!d.user) {
+          const here = window.location.pathname + window.location.search;
+          router.replace(`/login?next=${encodeURIComponent(safeNext(here))}`);
+        }
+      })
       .catch(() => setMe(null));
-  }, [path, isLogin]);
+  }, [path, isLogin, router]);
 
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" });

@@ -19,11 +19,13 @@ const csp = [
   "child-src 'self' blob:",
   "frame-src 'self' blob:",
   "media-src 'self' blob:",
-  "object-src 'self'", // the browser PDF viewer embeds as an object inside the case-page iframe
+  "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
 ].join("; ");
+// The case page embeds the browser PDF viewer as an object, so only /cases/* allows it.
+const casesCsp = csp.replace("object-src 'none'", "object-src 'self'");
 
 const securityHeaders = [
   { key: "Content-Security-Policy", value: csp },
@@ -74,6 +76,7 @@ const nextConfig: NextConfig = {
     return [
       { source: "/:path*", headers: securityHeaders },
       // Later entries override earlier ones for the same key.
+      { source: "/cases/:path*", headers: [{ key: "Content-Security-Policy", value: casesCsp }] },
       { source: "/api/files/:path*", headers: framedFileHeaders },
       { source: "/demos/:path*", headers: framedFileHeaders },
       { source: "/uploads/:path*", headers: uploadHeaders },
