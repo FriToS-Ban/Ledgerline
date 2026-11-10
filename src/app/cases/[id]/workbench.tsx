@@ -293,7 +293,7 @@ export function Workbench({ id }: { id: string }) {
                 Override and release in full
               </Button>
               <Button variant="danger" onClick={() => void resume("reject")}>
-                Do not pay
+                Block payment
               </Button>
             </div>
           </div>

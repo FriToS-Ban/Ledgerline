@@ -13,10 +13,10 @@ export type AnalystMemo = {
 };
 
 const VERB: Record<string, string> = {
-  auto_approve: "Pay",
-  partial_approve: "Pay the matched amount",
-  escalate: "Hold",
-  reject: "Do not pay",
+  auto_approve: "Release payment",
+  partial_approve: "Release the matched amount",
+  escalate: "Hold payment",
+  reject: "Block payment",
 };
 
 const memoSchema = z.object({

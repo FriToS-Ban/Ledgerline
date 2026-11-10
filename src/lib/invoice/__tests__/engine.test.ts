@@ -205,7 +205,7 @@ describe("edge cases", () => {
   it("decision brief speaks in pay/hold language", () => {
     const t = runPipeline(FIXTURES["near-dup"], ctx());
     const brief = buildBrief(t);
-    expect(brief.verb).toBe("Hold");
+    expect(brief.verb).toBe("Hold payment");
     expect(brief.facts.some((f) => f.label === "Who to pay")).toBe(true);
     expect(brief.ask.length).toBeGreaterThan(0);
   });

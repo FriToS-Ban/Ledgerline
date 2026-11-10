@@ -34,7 +34,8 @@ yarn-error.log*
 .env*
 !.env.example
 
-/data/*.secret
+/data/
+/public/uploads/
 
 # vercel
 .vercel
