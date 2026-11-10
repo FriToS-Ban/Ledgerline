@@ -78,7 +78,7 @@ function PrimaryNav({ path }: { path: string }) {
                 href={n.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex min-h-11 items-center whitespace-nowrap rounded-full px-4 text-[0.9375rem] transition-colors",
+                  "flex min-h-11 items-center whitespace-nowrap rounded-full px-4 text-[0.9375rem] xl:px-3 transition-colors",
                   active ? "font-medium text-foreground" : "text-text-mute hover:bg-muted hover:text-foreground",
                 )}
               >
@@ -147,7 +147,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <Flyers variant="app" />
       {skip}
       <header className="sticky top-0 z-40 px-3 pt-3 sm:px-6">
-        <div className="glass mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl px-3 py-2 shadow-[0_10px_40px_-12px_var(--neon-violet)] xl:flex-nowrap xl:rounded-full xl:px-4">
+        <div className="glass mx-auto flex max-w-[1240px] flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl px-3 py-2 shadow-[0_10px_40px_-12px_var(--neon-violet)] xl:flex-nowrap xl:gap-x-3 xl:rounded-full xl:px-4">
           <Link href="/" aria-label="Ledgerline, home" className="order-1 flex min-h-11 items-center gap-2 rounded-full pr-2">
             <span className="grid size-8 place-items-center rounded-full bg-[image:var(--gradient-neon)] text-primary-foreground shadow-[var(--glow-violet)]">
               <ShieldCheck className="size-4.5" aria-hidden />
@@ -172,7 +172,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     className="flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-full px-2 text-text-mute sm:px-3 transition-colors hover:bg-muted hover:text-foreground"
                   >
                     <LogOut className="size-4" aria-hidden />
-                    <span className="hidden sm:inline">Sign out</span>
+                    <span className="hidden sm:inline xl:hidden">Sign out</span>
                   </button>
                 )}
               </>
