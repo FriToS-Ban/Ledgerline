@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { POST as register } from "@/app/api/auth/register/route";
 import { authenticate } from "../credentials";
 import { MAX_FAILURES } from "../rate-limit";
@@ -15,7 +15,6 @@ const post = (path: string, body: unknown) =>
 
 describe("credentials sign-in and registration", () => {
   useTempCwd("auth-routes-");
-  afterEach(() => delete process.env.BOOTSTRAP_ADMIN_TOKEN);
 
   it("a burst of 20 parallel wrong passwords gets at most 5 password checks, then a lockout", async () => {
     await createUser({ email: "target@corp.io", name: "T", password: "real-secret-pass-1", role: "clerk" });
@@ -45,21 +44,10 @@ describe("credentials sign-in and registration", () => {
     expect(await authenticate({ email: "", password: "" }, null)).toEqual({ ok: false, reason: "invalid" });
   });
 
-  it("only makes an admin with the right bootstrap token, and only once", async () => {
-    const body = (email: string, bootstrapToken?: string) => ({ email, name: "Founder", password: "violet-anchor-881", bootstrapToken });
-    // not configured -> any token is refused, nothing is created
-    expect((await register(post("/api/auth/register", body("f1@corp.io", "x".repeat(30))))).status).toBe(403);
-    process.env.BOOTSTRAP_ADMIN_TOKEN = "t0k3n-".repeat(5);
-    expect((await register(post("/api/auth/register", body("f2@corp.io", "wrong-token-wrong-token-1")))).status).toBe(403);
-    const ok = await register(post("/api/auth/register", body("f3@corp.io", "t0k3n-".repeat(5))));
-    expect(ok.status).toBe(201);
-    expect((await ok.json()).user.role).toBe("admin");
-    expect(ok.headers.get("set-cookie")).toContain("ledgerline_session=");
-    // an admin now exists: the token no longer works
-    expect((await register(post("/api/auth/register", body("f4@corp.io", "t0k3n-".repeat(5))))).status).toBe(403);
-    // without a token, sign-up makes a clerk
-    const clerk = await register(post("/api/auth/register", body("f5@corp.io")));
-    expect((await clerk.json()).user.role).toBe("clerk");
+  it("sign-up always makes a clerk with a personal org, whatever the body says", async () => {
+    const r = await register(post("/api/auth/register", { email: "f5@corp.io", name: "Founder", password: "violet-anchor-881", bootstrapToken: "x".repeat(30) }));
+    expect(r.status).toBe(201);
+    expect((await r.json()).user.role).toBe("clerk");
   });
 
   it("refuses an invalid invite token", async () => {

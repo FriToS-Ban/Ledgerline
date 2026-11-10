@@ -25,7 +25,7 @@ Open http://localhost:3000 (the Command page) and run the Friday demo from the C
 
 - Demo accounts (`clerk@`, `approver@`, `admin@ledgerline.demo`, password `DEMO_PASSWORD`, default `ledgerline`) exist **only when `DEMO_USERS=1`**, in every environment. For local dev add `DEMO_USERS=1` to `.env.local`.
 - Sign-in is Auth.js (next-auth v5 beta, `src/auth.ts`) with a Credentials provider (email + password, scrypt) and the Drizzle adapter. Credentials sign-in forces JWT sessions, so revocation is a `token_version` on the user: password change and "sign out everywhere" bump it, and every request rejects JWTs carrying an older version. Sessions end 8 hours after sign-in. The JWT carries `userId`, `activeOrgId` and `orgRole`; the active org is re-verified against `memberships` on every request.
-- Anyone can sign up at `/register`; new accounts get a personal organization (owner membership), or join an organization when registering with a valid `inviteToken`. An owner or admin changes member roles on `/account`. To create the first admin, set `BOOTSTRAP_ADMIN_TOKEN` (>= 24 random chars) and send it as `bootstrapToken` when registering; it works only while no real admin exists, so unset it afterwards.
+- Anyone can sign up at `/register`; new accounts get a personal organization (owner membership), or join an organization when registering with a valid `inviteToken`. An owner or admin changes member roles on `/account`. The first person to register a workspace is its owner and invites everyone else from the workspace settings page.
 - `AUTH_SECRET` (>= 32 chars) is required in production. In development a random secret is created in `data/auth.secret`. Behind a reverse proxy or in production set `AUTH_URL` (or `AUTH_TRUST_HOST=1`) so Auth.js trusts the host. Cookies use the `__Host-` prefix in production.
 - Five failed sign-ins in 15 minutes lock that email (and, with `TRUST_PROXY=1` behind a reverse proxy, that client IP) for 15 minutes; the login screen shows the countdown.
 
@@ -55,7 +55,6 @@ The image (`Dockerfile`, Next.js `output: "standalone"`, non-root) runs `migrate
 | `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | yes | `S3_ENDPOINT` / `S3_REGION` / `S3_FORCE_PATH_STYLE` per provider |
 | `INNGEST_SIGNING_KEY` | yes | `/api/inngest` verifies request signatures; never expose it unsigned |
 | `TRUST_PROXY` | behind a proxy | `1` only if a proxy sets `X-Forwarded-For` |
-| `BOOTSTRAP_ADMIN_TOKEN` | optional | >= 24 chars; first admin, see Sign-in; unset afterwards |
 | `INTAKE_SECRET` | optional | enables the email webhook |
 | `AUTH_DISABLED`, `STORAGE_DRIVER=memory` | forbidden | rejected at boot in production |
 

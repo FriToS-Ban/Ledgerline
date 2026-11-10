@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { and, asc, eq, gt, inArray, isNull, notLike, sql } from "drizzle-orm";
 import { getDb, databaseUrl } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
@@ -181,20 +181,6 @@ export async function realAdminCount(): Promise<number> {
   await ensureUsers();
   const [r] = await getDb().select({ c: sql<number>`count(*)::int` }).from(t.users).where(usableAdmin(false));
   return r.c;
-}
-
-export const MIN_BOOTSTRAP_TOKEN_LENGTH = 24;
-
-/**
- * True when `token` equals BOOTSTRAP_ADMIN_TOKEN (constant-time, over sha256 digests so lengths
- * never leak) AND no real (non-demo) admin exists yet. Tokens shorter than 24 chars are ignored.
- */
-export async function bootstrapTokenAccepted(token: string): Promise<boolean> {
-  const expected = process.env.BOOTSTRAP_ADMIN_TOKEN?.trim() ?? "";
-  const digest = (v: string) => createHash("sha256").update(v).digest();
-  const match = timingSafeEqual(digest(token), digest(expected));
-  if (!match || expected.length < MIN_BOOTSTRAP_TOKEN_LENGTH) return false;
-  return (await realAdminCount()) === 0;
 }
 
 /**

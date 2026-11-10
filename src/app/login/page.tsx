@@ -19,7 +19,7 @@ const DEMO = [
 ];
 
 type Mode = "login" | "register";
-type Fields = Partial<Record<"email" | "name" | "password" | "bootstrapToken", string>>;
+type Fields = Partial<Record<"email" | "name" | "password", string>>;
 
 function fmt(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -36,8 +36,6 @@ function AuthCard() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
-  const [token, setToken] = useState("");
-  const [showToken, setShowToken] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [invitedTo, setInvitedTo] = useState<string | null>(null);
   const [fields, setFields] = useState<Fields>({});
@@ -111,7 +109,7 @@ function AuthCard() {
         const res = await fetch("/api/auth/register", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ email, name, password, ...(showToken && token ? { bootstrapToken: token } : {}), ...(invite ? { inviteToken: invite } : {}) }),
+          body: JSON.stringify({ email, name, password, ...(invite ? { inviteToken: invite } : {}) }),
         });
         ok = res.ok;
         data = await res.json().catch(() => ({}));
@@ -213,33 +211,6 @@ function AuthCard() {
             hint={register ? "At least 10 characters. Avoid common words and keyboard runs." : undefined}
             meter={register ? { email, name } : undefined}
           />
-          {register && (
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => setShowToken((s) => !s)}
-                aria-expanded={showToken}
-                className="min-h-11 rounded-md text-sm text-blue-text underline underline-offset-4 hover:text-foreground"
-              >
-                {showToken ? "Hide admin setup code" : "I have an admin setup code"}
-              </button>
-              {showToken && (
-                <div className="space-y-2">
-                  <Label htmlFor="token">Admin setup code</Label>
-                  <Input
-                    id="token"
-                    type="password"
-                    autoComplete="off"
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    aria-invalid={fields.bootstrapToken ? true : undefined}
-                    aria-describedby={fields.bootstrapToken ? "token-err" : undefined}
-                  />
-                  {fields.bootstrapToken && <FieldError id="token-err">{fields.bootstrapToken}</FieldError>}
-                </div>
-              )}
-            </div>
-          )}
 
           <div ref={errRef} tabIndex={-1} className="outline-none">
             {locked ? (

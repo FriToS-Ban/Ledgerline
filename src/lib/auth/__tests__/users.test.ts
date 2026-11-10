@@ -3,7 +3,6 @@ import { verifyPassword } from "../hash";
 import { getDb } from "@/lib/db/client";
 import { invites, memberships } from "@/lib/db/schema";
 import {
-  bootstrapTokenAccepted,
   bumpTokenVersion,
   changeMemberRole,
   createUser,
@@ -21,7 +20,6 @@ describe("users, roles and demo accounts", () => {
   useTempCwd("auth-users-");
   afterEach(() => {
     delete process.env.DEMO_USERS;
-    delete process.env.BOOTSTRAP_ADMIN_TOKEN;
   });
 
   it("never demotes the last owner, and only owners touch the owner role", async () => {
@@ -68,19 +66,11 @@ describe("users, roles and demo accounts", () => {
     expect((await listOrgMembers(demo.orgId)).some((u) => u.email.endsWith("@ledgerline.demo"))).toBe(false);
   });
 
-  it("does not count hidden demo admins for the bootstrap token", async () => {
+  it("does not count hidden demo admins", async () => {
     process.env.DEMO_USERS = "1";
     await findUser("admin@ledgerline.demo"); // seeded
     delete process.env.DEMO_USERS;
     expect(await realAdminCount()).toBe(1); // only "second" (users.role = admin)
-  });
-
-  it("bootstrap token: constant-time match, min length, and only while no real admin exists", async () => {
-    process.env.BOOTSTRAP_ADMIN_TOKEN = "short";
-    expect(await bootstrapTokenAccepted("short")).toBe(false); // too short to honour
-    process.env.BOOTSTRAP_ADMIN_TOKEN = "a".repeat(32);
-    expect(await bootstrapTokenAccepted("a".repeat(31))).toBe(false);
-    expect(await bootstrapTokenAccepted("a".repeat(32))).toBe(false); // "second" is a real admin
   });
 
   it("an org admin cannot see or change members of another org", async () => {

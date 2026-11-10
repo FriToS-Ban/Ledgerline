@@ -20,7 +20,6 @@ const prodSchema = z
     S3_BUCKET: z.string().trim().optional(),
     S3_ACCESS_KEY_ID: z.string().trim().optional(),
     S3_SECRET_ACCESS_KEY: z.string().trim().optional(),
-    BOOTSTRAP_ADMIN_TOKEN: z.string().trim().optional(),
     INNGEST_SIGNING_KEY: z.string().trim().optional(),
     DEMO_USERS: flag,
   });
@@ -42,9 +41,6 @@ function crossChecks(e: E): string[] {
       if (!e.S3_BUCKET) add("S3_BUCKET", "required when STORAGE_DRIVER is not memory");
       if (!e.S3_ACCESS_KEY_ID) add("S3_ACCESS_KEY_ID", "required when STORAGE_DRIVER is not memory");
       if (!e.S3_SECRET_ACCESS_KEY) add("S3_SECRET_ACCESS_KEY", "required when STORAGE_DRIVER is not memory");
-    }
-    if (e.BOOTSTRAP_ADMIN_TOKEN && e.BOOTSTRAP_ADMIN_TOKEN.length < 24) {
-      add("BOOTSTRAP_ADMIN_TOKEN", "must be at least 24 characters when set");
     }
     if (!e.INNGEST_SIGNING_KEY) {
       add("INNGEST_SIGNING_KEY", "required in production: /api/inngest must verify request signatures");

@@ -33,8 +33,6 @@ describe("validateEnv", () => {
     expect(errs({ ...good, AUTH_SECRET: "short" })).toContain("AUTH_SECRET");
     expect(errs({ ...good, AUTH_DISABLED: "1" })).toContain("AUTH_DISABLED");
     expect(errs({ ...good, STORAGE_DRIVER: "memory" })).toContain("STORAGE_DRIVER");
-    expect(errs({ ...good, BOOTSTRAP_ADMIN_TOKEN: "tooshort" })).toContain("BOOTSTRAP_ADMIN_TOKEN");
-    expect(validateEnv({ ...good, BOOTSTRAP_ADMIN_TOKEN: "x".repeat(24) })).toEqual({ ok: true });
   });
 });
 
