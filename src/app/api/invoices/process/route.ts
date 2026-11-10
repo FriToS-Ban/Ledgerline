@@ -41,7 +41,8 @@ export async function POST(req: NextRequest) {
     pdfPath = pdfBytes ? await saveUpload({ orgId, filename, bytes: pdfBytes }) : undefined;
   } catch (e) {
     if (e instanceof UploadRejected) return NextResponse.json({ error: e.message }, { status: e.status });
-    throw e;
+    console.error("upload storage failed", e);
+    return NextResponse.json({ error: "File storage is unavailable right now. Please try again shortly." }, { status: 503 });
   }
   await createInvoiceRecord({ orgId, id: invoiceId, demoId, filename, runId, pdfPath });
 
