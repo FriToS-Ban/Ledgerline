@@ -1,4 +1,4 @@
-import { ensureSchema, getDb } from "@/lib/db/client";
+import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import type { PipelineTrace } from "@/lib/invoice/schema";
 import { queueStats } from "@/lib/queue/jobs";
@@ -24,7 +24,6 @@ const RULE_LABEL: Record<string, string> = {
 };
 
 export async function computeMetrics() {
-  await ensureSchema();
   const db = getDb();
   const [invoices, decisions, q] = await Promise.all([
     db.select().from(t.invoices),

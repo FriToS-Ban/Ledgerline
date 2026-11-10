@@ -1,11 +1,10 @@
-import { ensureSchema, getDb } from "@/lib/db/client";
+import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import type { PipelineTrace } from "@/lib/invoice/schema";
 
 type Truth = { vendor: string; invoiceNumber: string | null; total: number | null; poNumbers: string[] };
 
 export async function computeAccuracy() {
-  await ensureSchema();
   const db = getDb();
   const [cases, decisions] = await Promise.all([db.select().from(t.evalCases), db.select().from(t.decisions)]);
   const dmap = new Map(decisions.map((d) => [d.invoiceId, d]));

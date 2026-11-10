@@ -44,9 +44,8 @@ export async function GET() {
   const unauth = await requireSignedIn();
   if (unauth) return unauth;
   const { desc } = await import("drizzle-orm");
-  const { getDb, ensureSchema } = await import("@/lib/db/client");
+  const { getDb } = await import("@/lib/db/client");
   const t = await import("@/lib/db/schema");
-  await ensureSchema();
   const rows = await getDb().select().from(t.emailMessages).orderBy(desc(t.emailMessages.receivedAt)).limit(25);
   const { imapConfigured } = await import("@/lib/email/imap");
   return NextResponse.json({ imap: imapConfigured(), emails: rows });

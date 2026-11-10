@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { defaultOrgId } from "@/lib/db/org";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import { loadFx, loadHistory, loadOpenPos, loadPolicy, loadCorrections, situationFingerprint, vendorApproved } from "@/lib/domain";
@@ -14,7 +15,7 @@ export type AuditEvent = {
   step: string;
   status: string;
   payload: unknown;
-  at: string;
+  at: Date;
 };
 
 /**
@@ -39,13 +40,15 @@ async function emit(
   payload: unknown,
 ) {
   const db = getDb();
+  const orgId = await defaultOrgId();
   const row = {
+    orgId,
     id: randomUUID(),
     invoiceId,
     step,
     status,
     payload: JSON.stringify(payload),
-    at: new Date().toISOString(),
+    at: new Date(),
   };
   await db.insert(t.auditEvents).values(row);
   return { ...row, payload };
@@ -183,7 +186,9 @@ export async function processCase(opts: {
   }
 
   const db = getDb();
+  const orgId = await defaultOrgId();
   await db.insert(t.decisions).values({
+    orgId,
     id: randomUUID(),
     invoiceId,
     recommendation: trace.decision.recommendation,
@@ -192,12 +197,13 @@ export async function processCase(opts: {
     explanation: trace.decision.explanation,
     needsHuman: trace.decision.needsHuman,
     trace: JSON.stringify(trace),
-    createdAt: new Date().toISOString(),
+    createdAt: new Date(),
   });
 
   if (extraction.lineItems.length) {
     await db.insert(t.invoiceLines).values(
       extraction.lineItems.map((l) => ({
+        orgId,
         id: randomUUID(),
         invoiceId,
         description: l.description,
@@ -210,6 +216,7 @@ export async function processCase(opts: {
   if (!trace.decision.needsHuman) {
     for (const a of trace.match.allocations) {
       await db.insert(t.matches).values({
+    orgId,
         id: randomUUID(),
         invoiceId,
         poId: a.poId,
@@ -221,6 +228,7 @@ export async function processCase(opts: {
   }
 
   await db.insert(t.allocations).values({
+    orgId,
     id: randomUUID(),
     invoiceId,
     payload: JSON.stringify(trace.match.allocations),
@@ -260,6 +268,7 @@ export async function resumeCase(opts: {
   by?: string;
 }) {
   const db = getDb();
+  const orgId = await defaultOrgId();
   const { eq } = await import("drizzle-orm");
   const [decision] = await db.select().from(t.decisions).where(eq(t.decisions.invoiceId, opts.invoiceId));
   if (!decision) throw new Error("No decision to resume");
@@ -279,19 +288,21 @@ export async function resumeCase(opts: {
   });
   if (human !== decision.recommendation) {
     await db.insert(t.decisionCorrections).values({
+    orgId,
       id: randomUUID(),
       fingerprint,
       situation: `${trace.extraction.vendorName} ${trace.match.method}`,
       original: decision.recommendation,
       human,
       note: opts.note ?? null,
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
     });
   }
 
   if (human !== "reject") {
     for (const a of trace.match.allocations) {
       await db.insert(t.matches).values({
+    orgId,
         id: randomUUID(),
         invoiceId: opts.invoiceId,
         poId: a.poId,
@@ -323,10 +334,12 @@ export async function createInvoiceRecord(opts: {
   pdfPath?: string | null;
 }) {
   const db = getDb();
+  const orgId = await defaultOrgId();
   const id = opts.id ?? randomUUID();
   const demo = DEMO_CASES.find((c) => c.id === opts.demoId);
   const pdfPath = opts.pdfPath ?? (demo ? `/demos/${demo.file}` : null);
   await db.insert(t.invoices).values({
+    orgId,
     id,
     demoId: opts.demoId ?? null,
     vendorId: null,
@@ -337,7 +350,7 @@ export async function createInvoiceRecord(opts: {
     pdfPath,
     status: "running",
     runId: opts.runId,
-    createdAt: new Date().toISOString(),
+    createdAt: new Date(),
   });
   return id;
 }

@@ -32,7 +32,6 @@ type MasterData = {
   pos: { id: string; number: string; amount: number; currency: string; status: string }[];
   poLineCount: number;
   erp?: boolean;
-  hostedDb?: boolean;
   imports: { id: string; source: string; vendors: number; pos: number; po_lines: number; errors: string; at: string }[];
 };
 
@@ -210,7 +209,7 @@ export default function OperationsPage() {
         {master && (
           <p className="mt-2 text-sm">
             {master.vendors.length} vendors ({master.vendors.filter((v) => !v.approved).length} blocked) ·{" "}
-            {master.pos.length} POs · {master.poLineCount} PO lines · {master.hostedDb ? "hosted database" : "local database"} ·{" "}
+            {master.pos.length} POs · {master.poLineCount} PO lines · PostgreSQL ·{" "}
             {master.erp ? "ERP connected" : "no ERP connected"}
             {master.imports[0] && (
               <span className="text-text-mute">

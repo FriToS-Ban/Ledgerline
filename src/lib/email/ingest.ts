@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { simpleParser } from "mailparser";
-import { ensureSchema, getDb } from "@/lib/db/client";
+import { defaultOrgId } from "@/lib/db/org";
+import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import { seedDatabase } from "@/lib/db/seed";
 import { saveUpload } from "@/lib/extract/save-upload";
@@ -26,7 +27,6 @@ export async function ingestRawEmail(
   raw: Buffer | Uint8Array,
   source: "webhook" | "imap" | "cli" = "webhook",
 ): Promise<IngestResult> {
-  await ensureSchema();
   await seedDatabase();
   const mail = await simpleParser(Buffer.from(raw));
   const sender = mail.from?.value[0]?.address ?? null;
@@ -34,6 +34,7 @@ export async function ingestRawEmail(
   const messageId = mail.messageId ?? `generated-${randomUUID()}`;
 
   const db = getDb();
+  const orgId = await defaultOrgId();
   const [seen] = await db.select().from(t.emailMessages).where(eq(t.emailMessages.messageId, messageId));
   if (seen) {
     return { status: "duplicate", messageId, sender, subject, invoiceIds: JSON.parse(seen.invoiceIds) };
@@ -51,6 +52,7 @@ export async function ingestRawEmail(
     const filename = file.filename ?? undefined;
     const pdfPath = saveUpload({ invoiceId, filename, bytes });
     await db.insert(t.invoices).values({
+      orgId,
       id: invoiceId,
       status: "queued",
       runId: randomUUID(),
@@ -58,18 +60,19 @@ export async function ingestRawEmail(
       source: "email",
       sender,
       subject,
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
     });
     await enqueue("process-invoice", { invoiceId, filename });
     invoiceIds.push(invoiceId);
   }
 
   await db.insert(t.emailMessages).values({
+      orgId,
     id: randomUUID(),
     messageId,
     sender,
     subject,
-    receivedAt: new Date().toISOString(),
+    receivedAt: new Date(),
     attachments: files.length,
     invoiceIds: JSON.stringify(invoiceIds),
     source,

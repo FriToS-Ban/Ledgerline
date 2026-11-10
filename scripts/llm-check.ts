@@ -1,12 +1,9 @@
 /**
  * Runs one demo invoice through the real pipeline and shows which model wrote the memo.
- * Usage: npx tsx --env-file=.env scripts/llm-check.ts   (uses a scratch DB, not data/app.db)
+ * Usage: npx tsx --env-file=.env scripts/llm-check.ts   (uses DATABASE_URL; run `npm run db:migrate` first)
  */
-import os from "node:os";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-process.env.DATABASE_URL = `file:${path.join(os.tmpdir(), `llm-check-${Date.now()}.db`).replace(/\\/g, "/")}`;
 
 async function main() {
   const { seedDatabase } = await import("../src/lib/db/seed");

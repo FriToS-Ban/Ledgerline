@@ -18,7 +18,7 @@ export async function POST() {
     if (!job) break;
     await getDb()
       .update(t.jobs)
-      .set({ lockedUntil: new Date(Date.now() + 8_000).toISOString() })
+      .set({ lockedUntil: new Date(Date.now() + 8_000) })
       .where(eq(t.jobs.id, job.id));
     abandoned.push(job.id);
   }

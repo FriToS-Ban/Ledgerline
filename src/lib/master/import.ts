@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { ensureSchema, rawDbClient } from "@/lib/db/client";
+import { query } from "@/lib/db/client";
+import { defaultOrgId } from "@/lib/db/org";
 import { parseCsv } from "./csv";
 
 export type ImportSummary = {
@@ -33,10 +34,6 @@ function money(v: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function dbClient() {
-  return rawDbClient();
-}
-
 /**
  * Upsert vendors / POs / PO lines from CSV text. Rows with problems are skipped
  * and reported — the import never half-applies a bad row. The spreadsheet is the
@@ -46,8 +43,7 @@ export async function importMaster(
   inputs: { name: string; text: string }[],
   source: string,
 ): Promise<ImportSummary> {
-  await ensureSchema();
-  const client = dbClient();
+  const orgId = await defaultOrgId();
   const summary: ImportSummary = { vendors: 0, pos: 0, poLines: 0, errors: [] };
 
   const parsed = inputs.map((f) => {
@@ -68,24 +64,28 @@ export async function importMaster(
         continue;
       }
       const id = r.id || `v-${slug(name)}`;
-      await client.execute({
-        sql: `INSERT INTO vendors (id,name,legal_name,approved,currency,payment_terms) VALUES (?,?,?,?,?,?)
-              ON CONFLICT(id) DO UPDATE SET name=excluded.name, legal_name=excluded.legal_name,
-                approved=excluded.approved, currency=excluded.currency, payment_terms=excluded.payment_terms`,
-        args: [
+      await query(
+        `INSERT INTO vendors (org_id,id,name,legal_name,approved,currency,payment_terms) VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT (org_id,id) DO UPDATE SET name=excluded.name, legal_name=excluded.legal_name,
+           approved=excluded.approved, currency=excluded.currency, payment_terms=excluded.payment_terms`,
+        [
+          orgId,
           id,
           name,
           r.legal_name || name,
-          bool(r.approved, true) ? 1 : 0,
+          bool(r.approved, true),
           (r.currency || "USD").toUpperCase(),
           r.payment_terms || "Net 30",
         ],
-      });
+      );
       summary.vendors++;
     }
   }
 
-  const vendors = (await client.execute("SELECT id,name,legal_name FROM vendors")).rows;
+  const vendors = await query<{ id: string; name: string; legal_name: string }>(
+    "SELECT id,name,legal_name FROM vendors WHERE org_id = $1",
+    [orgId],
+  );
   const resolveVendor = (ref: string) => {
     const k = ref.toLowerCase();
     const hit = vendors.find(
@@ -108,17 +108,16 @@ export async function importMaster(
       else if (amount === null || amount < 0) summary.errors.push(`${where} (${number}): invalid amount "${r.amount}"`);
       else if (!vendorId) summary.errors.push(`${where} (${number}): unknown vendor "${vendorRef}"`);
       else {
-        const existing = (
-          await client.execute({ sql: "SELECT id FROM purchase_orders WHERE number = ?", args: [number] })
-        ).rows[0];
+        const existing = (await query<{ id: string }>("SELECT id FROM purchase_orders WHERE org_id = $1 AND number = $2", [orgId, number]))[0];
         const id = existing ? String(existing.id) : `po-${slug(number)}`;
-        await client.execute({
-          sql: `INSERT INTO purchase_orders (id,number,vendor_id,amount,currency,status,issue_date,description,goods_received)
-                VALUES (?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(id) DO UPDATE SET number=excluded.number, vendor_id=excluded.vendor_id, amount=excluded.amount,
-                  currency=excluded.currency, status=excluded.status, issue_date=excluded.issue_date,
-                  description=excluded.description, goods_received=excluded.goods_received`,
-          args: [
+        await query(
+          `INSERT INTO purchase_orders (org_id,id,number,vendor_id,amount,currency,status,issue_date,description,goods_received)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           ON CONFLICT (org_id,id) DO UPDATE SET number=excluded.number, vendor_id=excluded.vendor_id, amount=excluded.amount,
+             currency=excluded.currency, status=excluded.status, issue_date=excluded.issue_date,
+             description=excluded.description, goods_received=excluded.goods_received`,
+          [
+            orgId,
             id,
             number,
             vendorId,
@@ -127,9 +126,9 @@ export async function importMaster(
             (r.status || "open").toLowerCase(),
             r.issue_date || new Date().toISOString().slice(0, 10),
             r.description || "",
-            bool(r.goods_received, true) ? 1 : 0,
+            bool(r.goods_received, true),
           ],
-        });
+        );
         summary.pos++;
       }
     }
@@ -142,7 +141,7 @@ export async function importMaster(
       const number = r.po_number || r.number || r.po;
       const amount = money(r.amount);
       const po = number
-        ? (await client.execute({ sql: "SELECT id FROM purchase_orders WHERE number = ?", args: [number] })).rows[0]
+        ? (await query<{ id: string }>("SELECT id FROM purchase_orders WHERE org_id = $1 AND number = $2", [orgId, number]))[0]
         : null;
       if (!po) summary.errors.push(`${where}: unknown PO "${number ?? ""}"`);
       else if (amount === null) summary.errors.push(`${where}: invalid amount "${r.amount}"`);
@@ -150,31 +149,32 @@ export async function importMaster(
         const poId = String(po.id);
         if (!cleared.has(poId)) {
           // File is source of truth for this PO's lines: replace, don't append.
-          await client.execute({ sql: "DELETE FROM po_lines WHERE po_id = ?", args: [poId] });
+          await query("DELETE FROM po_lines WHERE org_id = $1 AND po_id = $2", [orgId, poId]);
           cleared.add(poId);
         }
-        await client.execute({
-          sql: "INSERT INTO po_lines (id,po_id,description,amount) VALUES (?,?,?,?)",
-          args: [randomUUID(), poId, r.description || "", amount],
-        });
+        await query("INSERT INTO po_lines (org_id,id,po_id,description,amount) VALUES ($1,$2,$3,$4,$5)", [
+          orgId,
+          randomUUID(),
+          poId,
+          r.description || "",
+          amount,
+        ]);
         summary.poLines++;
       }
     }
   }
 
   const signature = createHash("sha1").update(inputs.map((i) => i.text).join("\u0000")).digest("hex");
-  await client.execute({
-    sql: "INSERT INTO master_imports (id,source,signature,vendors,pos,po_lines,errors,at) VALUES (?,?,?,?,?,?,?,?)",
-    args: [
-      randomUUID(),
-      source,
-      signature,
-      summary.vendors,
-      summary.pos,
-      summary.poLines,
-      JSON.stringify(summary.errors),
-      new Date().toISOString(),
-    ],
-  });
+  await query("INSERT INTO master_imports (org_id,id,source,signature,vendors,pos,po_lines,errors,at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)", [
+    orgId,
+    randomUUID(),
+    source,
+    signature,
+    summary.vendors,
+    summary.pos,
+    summary.poLines,
+    JSON.stringify(summary.errors),
+    new Date(),
+  ]);
   return summary;
 }

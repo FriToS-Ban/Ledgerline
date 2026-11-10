@@ -48,7 +48,7 @@ describe("queue / master / email (isolated temp cwd)", () => {
     expect(await jobs.claimNext()).toBeNull(); // backing off
 
     const db = getDb();
-    await db.update(t.jobs).set({ runAt: new Date(Date.now() - 1000).toISOString() }).where(eq(t.jobs.id, id));
+    await db.update(t.jobs).set({ runAt: new Date(Date.now() - 1000) }).where(eq(t.jobs.id, id));
     const second = await jobs.claimNext();
     expect(second?.attempts).toBe(2);
     expect(await jobs.failJob(second!, new Error("boom again"))).toBe(true);
@@ -60,7 +60,7 @@ describe("queue / master / email (isolated temp cwd)", () => {
     const crashed = await jobs.enqueue("process-invoice", { invoiceId: "y" });
     const c = await jobs.claimNext();
     expect(c?.id).toBe(crashed);
-    await db.update(t.jobs).set({ lockedUntil: new Date(Date.now() - 1000).toISOString() }).where(eq(t.jobs.id, crashed));
+    await db.update(t.jobs).set({ lockedUntil: new Date(Date.now() - 1000) }).where(eq(t.jobs.id, crashed));
     const recovered = await jobs.claimNext();
     expect(recovered?.id).toBe(crashed);
     await jobs.completeJob(crashed);

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { rawDbClient } from "@/lib/db/client";
+import { query } from "@/lib/db/client";
 import { createToken, hashSessionId, IDLE_TTL_MS, readToken } from "../session";
 import { activeSessionCount, createSession, resolveSession, revokeSession, revokeUserSessions } from "../sessions";
 import { changeRole, createUser } from "../users";
@@ -15,7 +15,7 @@ describe("DB-backed sessions", () => {
     await createUser({ ...alice, password: "a-strong-passphrase" });
     const { token, sid } = await createSession(alice);
     expect(readToken(token)?.sid).toBe(sid);
-    const rows = (await rawDbClient().execute("SELECT id_hash FROM auth_sessions")).rows.map((r) => String(r.id_hash));
+    const rows = (await query<{ id_hash: string }>("SELECT id_hash FROM auth_sessions")).map((r) => r.id_hash);
     expect(rows).toContain(hashSessionId(sid));
     expect(rows).not.toContain(sid);
     expect(await resolveSession(token)).toMatchObject({ email: alice.email, role: "clerk" });

@@ -1,4 +1,5 @@
-import { ensureSchema, rawDbClient } from "@/lib/db/client";
+import { query } from "@/lib/db/client";
+import { defaultOrgId } from "@/lib/db/org";
 import { importMaster, type ImportSummary } from "./import";
 
 /**
@@ -46,10 +47,11 @@ export async function syncFromErp(): Promise<ImportSummary & { skipped?: string 
 /** Run at most every ERP_SYNC_MINUTES (default 15); safe to call on every worker tick. */
 export async function syncErpIfDue() {
   if (!erpConfigured()) return null;
-  await ensureSchema();
   const last = (
-    await rawDbClient().execute("SELECT at FROM master_imports WHERE source = 'erp' ORDER BY at DESC LIMIT 1")
-  ).rows[0];
+    await query<{ at: Date }>("SELECT at FROM master_imports WHERE org_id = $1 AND source = 'erp' ORDER BY at DESC LIMIT 1", [
+      await defaultOrgId(),
+    ])
+  )[0];
   const every = Number(process.env.ERP_SYNC_MINUTES ?? 15) * 60_000;
   if (last && Date.now() - new Date(String(last.at)).getTime() < every) return null;
   return syncFromErp();
