@@ -20,6 +20,7 @@ describe("csv", () => {
 describe("queue / master / email (isolated temp cwd)", () => {
   const origCwd = process.cwd();
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ap-ops-"));
+  let orgId = "";
 
   beforeAll(() => {
     process.chdir(tmp);
@@ -33,12 +34,14 @@ describe("queue / master / email (isolated temp cwd)", () => {
     const { getDb } = await import("@/lib/db/client");
     const t = await import("@/lib/db/schema");
     const { eq } = await import("drizzle-orm");
+    const { makeOrg } = await import("@/test/orgs");
+    orgId = await makeOrg();
 
     expect(jobs.backoffMs(1)).toBe(5_000);
     expect(jobs.backoffMs(2)).toBe(20_000);
     expect(jobs.backoffMs(10)).toBe(600_000);
 
-    const id = await jobs.enqueue("process-invoice", { invoiceId: "x" }, { maxAttempts: 2 });
+    const id = await jobs.enqueue(orgId, "process-invoice", { invoiceId: "x" }, { maxAttempts: 2 });
     const first = await jobs.claimNext();
     expect(first?.id).toBe(id);
     expect(first?.attempts).toBe(1);
@@ -57,13 +60,13 @@ describe("queue / master / email (isolated temp cwd)", () => {
     expect(row.lastError).toBe("boom again");
 
     // simulate a crash: job left "running" with an expired lease
-    const crashed = await jobs.enqueue("process-invoice", { invoiceId: "y" });
+    const crashed = await jobs.enqueue(orgId, "process-invoice", { invoiceId: "y" });
     const c = await jobs.claimNext();
     expect(c?.id).toBe(crashed);
     await db.update(t.jobs).set({ lockedUntil: new Date(Date.now() - 1000) }).where(eq(t.jobs.id, crashed));
     const recovered = await jobs.claimNext();
     expect(recovered?.id).toBe(crashed);
-    await jobs.completeJob(crashed);
+    await jobs.completeJob({ orgId, id: crashed });
   });
 
   it("imports vendors, POs and lines from CSV, reporting bad rows", async () => {
@@ -71,6 +74,7 @@ describe("queue / master / email (isolated temp cwd)", () => {
     const { getDb } = await import("@/lib/db/client");
     const t = await import("@/lib/db/schema");
     const res = await importMaster(
+      orgId,
       [
         { name: "vendors.csv", text: "name,approved,currency\nZed Corp,yes,USD\nBlocked Co,no,USD\n" },
         {
@@ -90,7 +94,7 @@ describe("queue / master / email (isolated temp cwd)", () => {
     expect(vendors.find((v) => v.name === "Blocked Co")?.approved).toBe(false);
 
     // re-import is an update, not a duplicate
-    await importMaster([{ name: "pos.csv", text: "number,vendor,amount\nPO-9001,Zed Corp,2000\n" }], "test");
+    await importMaster(orgId, [{ name: "pos.csv", text: "number,vendor,amount\nPO-9001,Zed Corp,2000\n" }], "test");
     const after = (await db.select().from(t.purchaseOrders)).filter((p) => p.number === "PO-9001");
     expect(after).toHaveLength(1);
     expect(after[0].amount).toBe(2000);
@@ -124,19 +128,20 @@ describe("queue / master / email (isolated temp cwd)", () => {
       "",
     ].join("\r\n");
 
-    const before = (await queueStats()).counts.queued;
-    const r1 = await ingestRawEmail(Buffer.from(eml));
+    const before = (await queueStats(orgId)).counts.queued;
+    const r1 = await ingestRawEmail(orgId, Buffer.from(eml));
     expect(r1.status).toBe("ingested");
     expect(r1.sender).toBe("billing@vendor.test");
     expect(r1.invoiceIds).toHaveLength(1);
-    const r2 = await ingestRawEmail(Buffer.from(eml));
+    const r2 = await ingestRawEmail(orgId, Buffer.from(eml));
     expect(r2.status).toBe("duplicate");
-    expect((await queueStats()).counts.queued).toBe(before + 1);
+    expect((await queueStats(orgId)).counts.queued).toBe(before + 1);
 
     const [inv] = await getDb().select().from(t.invoices);
     expect(inv.source).toBe("email");
 
     const noAtt = await ingestRawEmail(
+      orgId,
       Buffer.from("From: a@b.test\r\nSubject: hi\r\nMessage-ID: <n1@b.test>\r\n\r\nhello"),
     );
     expect(noAtt.status).toBe("no-attachments");

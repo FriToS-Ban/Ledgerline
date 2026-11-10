@@ -40,28 +40,33 @@ describe("ERP connector and approval limits (isolated temp cwd)", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     const { syncFromErp, syncErpIfDue } = await import("@/lib/master/erp");
-    const res = await syncFromErp();
+    const { makeOrg } = await import("@/test/orgs");
+    const orgId = await makeOrg();
+    const res = await syncFromErp(orgId);
     expect(res).toMatchObject({ vendors: 1, pos: 1 });
     expect(res.errors.join(" ")).toContain("Ghost Co");
     const call = fetchMock.mock.calls[0] as unknown as [string, { headers: Record<string, string> }];
     expect(call[1].headers.authorization).toBe("Bearer tok");
     // just synced -> not due again
-    expect(await syncErpIfDue()).toBeNull();
+    expect(await syncErpIfDue(orgId)).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces ERP outages instead of silently keeping stale data", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 503 })));
     const { syncFromErp } = await import("@/lib/master/erp");
-    await expect(syncFromErp()).rejects.toThrow("503");
+    const { makeOrg } = await import("@/test/orgs");
+    await expect(syncFromErp(await makeOrg())).rejects.toThrow("503");
   });
 
-  it("applies role approval limits from policy", async () => {
+  it("applies org-role approval limits from the org's own policy", async () => {
     const { seedDatabase } = await import("@/lib/db/seed");
     const { approvalLimit } = await import("@/lib/auth/users");
-    await seedDatabase();
-    expect(await approvalLimit("clerk")).toBe(5000);
-    expect(await approvalLimit("approver")).toBe(100000);
-    expect(await approvalLimit("admin")).toBe(Infinity);
+    const { makeOrg } = await import("@/test/orgs");
+    const orgId = await makeOrg();
+    await seedDatabase(orgId, { pdfs: false });
+    expect(await approvalLimit(orgId, "member")).toBe(5000);
+    expect(await approvalLimit(orgId, "admin")).toBe(100000);
+    expect(await approvalLimit(orgId, "owner")).toBe(Infinity);
   });
 });

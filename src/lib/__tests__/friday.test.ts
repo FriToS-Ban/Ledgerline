@@ -21,16 +21,18 @@ describe("Friday inbox end to end (isolated temp cwd)", () => {
     const { computeAccuracy } = await import("@/lib/accuracy");
     const { computeMetrics } = await import("@/lib/metrics");
 
-    const loaded = await loadFridayInbox();
+    const { makeOrg } = await import("@/test/orgs");
+    const orgId = await makeOrg();
+    const loaded = await loadFridayInbox(orgId);
     expect(loaded.invoices).toBeGreaterThanOrEqual(28);
-    expect((await loadFridayInbox()).alreadyLoaded).toBe(true);
+    expect((await loadFridayInbox(orgId)).alreadyLoaded).toBe(true);
 
-    const r = await drainQueue(100);
+    const r = await drainQueue(100, orgId);
     expect(r.ran).toBeGreaterThanOrEqual(28);
 
-    const acc = await computeAccuracy();
+    const acc = await computeAccuracy(orgId);
     console.log(JSON.stringify({ ...acc, misses: acc.misses }, null, 1));
-    const m = await computeMetrics();
+    const m = await computeMetrics(orgId);
     console.log(JSON.stringify(m, null, 1));
 
     expect(acc.pending).toBe(0);

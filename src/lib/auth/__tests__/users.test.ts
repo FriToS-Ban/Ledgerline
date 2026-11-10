@@ -5,13 +5,13 @@ import { invites, memberships } from "@/lib/db/schema";
 import {
   bootstrapTokenAccepted,
   bumpTokenVersion,
-  changeRole,
+  changeMemberRole,
   createUser,
   findInvite,
   findUser,
   hashInviteToken,
   listMemberships,
-  listUsers,
+  listOrgMembers,
   realAdminCount,
   setPassword,
 } from "../users";
@@ -24,23 +24,28 @@ describe("users, roles and demo accounts", () => {
     delete process.env.BOOTSTRAP_ADMIN_TOKEN;
   });
 
-  it("never demotes the last admin", async () => {
-    await createUser({ email: "boss@corp.io", name: "Boss", password: "p-unique-9876", role: "admin" });
-    const r = await changeRole("boss@corp.io", "clerk");
-    expect(r).toMatchObject({ ok: false, status: 409 });
-    expect((await findUser("boss@corp.io"))?.role).toBe("admin");
+  it("never demotes the last owner, and only owners touch the owner role", async () => {
+    const boss = (await createUser({ email: "boss@corp.io", name: "Boss", password: "p-unique-9876", role: "clerk" }))!;
+    const [org] = await listMemberships(boss.id);
+    expect(await changeMemberRole(org.orgId, "owner", "boss@corp.io", "member")).toMatchObject({ ok: false, status: 409 });
+    expect((await listOrgMembers(org.orgId))[0]).toMatchObject({ email: "boss@corp.io", role: "owner" });
 
-    await createUser({ email: "second@corp.io", name: "Second", password: "p-unique-9876", role: "clerk" });
-    expect(await changeRole("second@corp.io", "admin")).toMatchObject({ ok: true });
-    expect(await changeRole("BOSS@corp.io", "approver")).toMatchObject({ ok: true, user: { role: "approver" } });
-    // now "second" is the only admin
-    expect(await changeRole("second@corp.io", "clerk")).toMatchObject({ ok: false, status: 409 });
-    // re-asserting admin on the last admin is fine
-    expect(await changeRole("second@corp.io", "admin")).toMatchObject({ ok: true });
+    const second = (await createUser({ email: "second@corp.io", name: "Second", password: "p-unique-9876", role: "admin" }))!;
+    await getDb().insert(memberships).values({ orgId: org.orgId, userId: second.id, role: "member" });
+    expect(await changeMemberRole(org.orgId, "admin", "second@corp.io", "owner")).toMatchObject({ ok: false, status: 403 });
+    expect(await changeMemberRole(org.orgId, "owner", "second@corp.io", "owner")).toMatchObject({ ok: true });
+    expect(await changeMemberRole(org.orgId, "owner", "BOSS@corp.io", "admin")).toMatchObject({ ok: true, user: { role: "admin" } });
+    // now "second" is the only owner
+    expect(await changeMemberRole(org.orgId, "owner", "second@corp.io", "member")).toMatchObject({ ok: false, status: 409 });
+    expect(await changeMemberRole(org.orgId, "owner", "second@corp.io", "owner")).toMatchObject({ ok: true });
   });
 
-  it("returns 404 for an unknown user", async () => {
-    expect(await changeRole("ghost@corp.io", "clerk")).toMatchObject({ ok: false, status: 404 });
+  it("returns 404 for someone who is not a member of the org", async () => {
+    const [org] = await listMemberships((await findUser("boss@corp.io"))!.id);
+    expect(await changeMemberRole(org.orgId, "owner", "ghost@corp.io", "member")).toMatchObject({ ok: false, status: 404 });
+    const outsider = (await createUser({ email: "outsider@corp.io", name: "Out", password: "p-unique-9876", role: "clerk" }))!;
+    expect(outsider.id).toBeTruthy();
+    expect(await changeMemberRole(org.orgId, "owner", "outsider@corp.io", "admin")).toMatchObject({ ok: false, status: 404 });
   });
 
   it("refuses a duplicate email and stores a salted hash", async () => {
@@ -55,26 +60,19 @@ describe("users, roles and demo accounts", () => {
     expect(await findUser("admin@ledgerline.demo")).toBeNull();
     process.env.DEMO_USERS = "1";
     expect((await findUser("admin@ledgerline.demo"))?.role).toBe("admin");
-    expect((await listUsers()).some((u) => u.email === "admin@ledgerline.demo")).toBe(true);
+    const demo = (await listMemberships((await findUser("admin@ledgerline.demo"))!.id))[0];
+    expect((await listOrgMembers(demo.orgId)).some((u) => u.email === "admin@ledgerline.demo")).toBe(true);
     delete process.env.DEMO_USERS;
     // rows still exist, but are invisible and cannot sign in
     expect(await findUser("admin@ledgerline.demo")).toBeNull();
-    expect((await listUsers()).some((u) => u.email.endsWith("@ledgerline.demo"))).toBe(false);
+    expect((await listOrgMembers(demo.orgId)).some((u) => u.email.endsWith("@ledgerline.demo"))).toBe(false);
   });
 
-  it("does not count hidden demo admins when protecting the last admin", async () => {
+  it("does not count hidden demo admins for the bootstrap token", async () => {
     process.env.DEMO_USERS = "1";
-    expect((await findUser("admin@ledgerline.demo"))?.role).toBe("admin"); // seeded
-    // demote every real admin but one
-    for (const u of await listUsers()) {
-      if (u.role === "admin" && !u.email.endsWith("@ledgerline.demo") && u.email !== "second@corp.io") {
-        await changeRole(u.email, "clerk");
-      }
-    }
+    await findUser("admin@ledgerline.demo"); // seeded
     delete process.env.DEMO_USERS;
-    expect(await realAdminCount()).toBe(1);
-    // the demo admin row still exists, but can't sign in: "second" is the last usable admin
-    expect(await changeRole("second@corp.io", "clerk")).toMatchObject({ ok: false, status: 409 });
+    expect(await realAdminCount()).toBe(1); // only "second" (users.role = admin)
   });
 
   it("bootstrap token: constant-time match, min length, and only while no real admin exists", async () => {
@@ -83,7 +81,14 @@ describe("users, roles and demo accounts", () => {
     process.env.BOOTSTRAP_ADMIN_TOKEN = "a".repeat(32);
     expect(await bootstrapTokenAccepted("a".repeat(31))).toBe(false);
     expect(await bootstrapTokenAccepted("a".repeat(32))).toBe(false); // "second" is a real admin
-    await changeRole("second@corp.io", "admin");
+  });
+
+  it("an org admin cannot see or change members of another org", async () => {
+    const [a] = await listMemberships((await findUser("boss@corp.io"))!.id);
+    const [b] = await listMemberships((await findUser("outsider@corp.io"))!.id);
+    expect((await listOrgMembers(a.orgId)).map((m) => m.email)).not.toContain("outsider@corp.io");
+    expect((await listOrgMembers(b.orgId)).map((m) => m.email)).toEqual(["outsider@corp.io"]);
+    expect(await changeMemberRole(a.orgId, "owner", "outsider@corp.io", "member")).toMatchObject({ ok: false, status: 404 });
   });
 
   it("gives a new user a personal organization with an owner membership", async () => {
