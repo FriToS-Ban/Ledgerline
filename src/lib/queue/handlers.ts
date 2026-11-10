@@ -1,17 +1,16 @@
-import fs from "node:fs";
-import path from "node:path";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import { processCase, resumeCase } from "@/lib/process-case";
 import type { DemoId } from "@/lib/fixtures/cases";
 import type { JobRow } from "./jobs";
+import { getStorage, keyBelongsToOrg, readAll } from "@/lib/storage";
 
-function loadBytes(pdfPath: string | null): Uint8Array | undefined {
-  // Older rows store /uploads/<file>; newer ones /api/files/<file>. Both live in public/uploads.
-  if (!pdfPath || !/^\/(uploads|api\/files)\//.test(pdfPath)) return undefined;
-  const file = path.join(process.cwd(), "public", "uploads", path.basename(pdfPath));
-  return fs.existsSync(file) ? new Uint8Array(fs.readFileSync(file)) : undefined;
+async function loadBytes(orgId: string, pdfPath: string | null): Promise<Uint8Array | undefined> {
+  // Uploaded files are storage keys under org/<orgId>/; demo fixtures (/demos/...) are not stored.
+  if (!pdfPath || !keyBelongsToOrg(pdfPath, orgId)) return undefined;
+  const stream = await getStorage().get(pdfPath);
+  return stream ? readAll(stream) : undefined;
 }
 
 export async function processInvoiceJob(data: { orgId: string; invoiceId: string; demoId?: string | null; filename?: string }) {
@@ -26,7 +25,7 @@ export async function processInvoiceJob(data: { orgId: string; invoiceId: string
     invoiceId: data.invoiceId,
     demoId: (data.demoId ?? undefined) as DemoId | undefined,
     filename: data.filename,
-    pdfBytes: loadBytes(inv.pdfPath),
+    pdfBytes: await loadBytes(data.orgId, inv.pdfPath),
   });
 }
 

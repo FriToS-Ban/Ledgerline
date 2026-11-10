@@ -33,6 +33,10 @@ Open http://localhost:3000 (the Command page) and run the Friday demo from the C
 
 Every tenant table carries `org_id`, and every query, update, delete and insert is scoped to the signed-in caller's active organization (`getActor().orgId`), threaded explicitly through the data-access functions; background jobs and Inngest events carry `orgId` in their payload. Authorization uses the caller's membership role: `owner` / `admin` may release payments (owners without limit, admins up to the `approverLimit` policy), change policy, import master data and manage members; `member` can create cases and reject. The folder, ERP and mailbox connectors are deployment-wide and feed only the org named by `SERVICE_ORG_SLUG` (default `zamp-demo` outside production). `defaultOrgId()` is for seed/scripts and the `AUTH_DISABLED` dev actor only.
 
+### File storage
+
+Uploaded invoices (web upload, email attachments) live in S3-compatible object storage, never under `public/`. Start MinIO with `docker compose up -d minio minio-init` and set the `S3_*` variables from `.env.example` (`S3_FORCE_PATH_STYLE=1` for MinIO). Objects are keyed `org/<orgId>/<uuid>-<filename>`; `invoices.pdf_path` stores the key. Files are served only by `GET /api/files/<invoiceId>`, which checks the caller's organization, streams the object and sets `nosniff` and `private, no-store`; there are no public or presigned URLs. Uploads are limited to PDF and common images, 15 MB. Tests use an in-memory driver (`STORAGE_DRIVER=memory`).
+
 ## Demo cases
 
 1. Split / partial billing against PO-31000

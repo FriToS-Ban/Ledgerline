@@ -146,10 +146,15 @@ describe("tenant isolation (zamp-demo vs acme)", () => {
 
   it("stored files are served only to the owning org", async () => {
     const { GET: file } = await import("@/app/api/files/[name]/route");
-    const name = `${fileInvoiceId}.pdf`;
-    const ctx = { params: Promise.resolve({ name }) };
+    const ctx = { params: Promise.resolve({ name: fileInvoiceId }) };
     as(aMember);
-    expect((await file(req("/"), ctx)).status).toBe(200);
+    const ok = await file(req("/"), ctx);
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(ok.headers.get("cache-control")).toBe("private, no-store");
+    expect(ok.headers.get("content-type")).toBe("application/pdf");
+    expect(ok.headers.get("content-disposition")).toMatch(/^inline; filename="[A-Za-z0-9-]+\.pdf"$/);
+    expect(new TextDecoder().decode(new Uint8Array(await ok.arrayBuffer()).slice(0, 4))).toBe("%PDF");
     as(bOwner);
     expect((await file(req("/"), ctx)).status).toBe(404);
   });

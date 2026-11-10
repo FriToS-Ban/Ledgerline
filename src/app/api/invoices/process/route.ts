@@ -5,7 +5,7 @@ import { seedOrgDefaults } from "@/lib/db/seed";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import { createInvoiceRecord } from "@/lib/process-case";
-import { saveUpload } from "@/lib/extract/save-upload";
+import { saveUpload, UploadRejected } from "@/lib/extract/save-upload";
 import { enqueue } from "@/lib/queue/jobs";
 import { drainQueue } from "@/lib/queue/worker";
 import type { DemoId } from "@/lib/fixtures/cases";
@@ -36,7 +36,13 @@ export async function POST(req: NextRequest) {
 
   const runId = randomUUID();
   const invoiceId = randomUUID();
-  const pdfPath = pdfBytes ? saveUpload({ invoiceId, filename, bytes: pdfBytes }) : undefined;
+  let pdfPath: string | undefined;
+  try {
+    pdfPath = pdfBytes ? await saveUpload({ orgId, filename, bytes: pdfBytes }) : undefined;
+  } catch (e) {
+    if (e instanceof UploadRejected) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
   await createInvoiceRecord({ orgId, id: invoiceId, demoId, filename, runId, pdfPath });
 
   // Durable path: the job row survives a crash and is retried with backoff.

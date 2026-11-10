@@ -52,7 +52,7 @@ export async function ingestRawEmail(
     const invoiceId = randomUUID();
     const bytes = new Uint8Array(file.content);
     const filename = file.filename ?? undefined;
-    const pdfPath = saveUpload({ invoiceId, filename, bytes });
+    const pdfPath = await saveUpload({ orgId, filename, bytes });
     await db.insert(t.invoices).values({
       orgId,
       id: invoiceId,
