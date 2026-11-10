@@ -175,6 +175,41 @@ button:disabled { cursor: not-allowed; }
   color: transparent;
 }
 
+/* ---------- CSS-only starfield: the reduced-motion / no-WebGL sky, and the base under the 3D layer ---------- */
+.starfield {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1px 1px at 23px 41px, var(--text), transparent 70%),
+    radial-gradient(1px 1px at 151px 113px, var(--text-mute), transparent 70%),
+    radial-gradient(1.5px 1.5px at 97px 187px, var(--blue-text), transparent 70%),
+    radial-gradient(1px 1px at 211px 29px, var(--text), transparent 70%),
+    radial-gradient(1.5px 1.5px at 61px 259px, var(--violet-text), transparent 70%),
+    radial-gradient(1px 1px at 283px 211px, var(--text-mute), transparent 70%),
+    radial-gradient(2px 2px at 331px 97px, var(--neon-cyan), transparent 70%),
+    radial-gradient(1px 1px at 173px 317px, var(--text), transparent 70%);
+  background-size: 240px 240px, 310px 310px, 270px 270px, 390px 390px, 350px 350px, 290px 290px, 520px 520px, 430px 430px;
+  opacity: 0.55;
+  animation: starfield-twinkle 7s ease-in-out infinite alternate;
+}
+.starfield::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 45% 35% at 12% 70%, color-mix(in srgb, var(--neon-violet) 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 88% 30%, color-mix(in srgb, var(--neon-blue) 10%, transparent), transparent 70%);
+}
+@keyframes starfield-twinkle { from { opacity: 0.4; } to { opacity: 0.65; } }
+
+/* the floating nav scroller: fade the clipped edges on small screens */
+.nav-scroll {
+  scrollbar-width: none;
+  mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
+}
+.nav-scroll::-webkit-scrollbar { display: none; }
+
 /* ---------- the ledger (now a glass data panel) ---------- */
 .ledger {
   background: var(--glass);
