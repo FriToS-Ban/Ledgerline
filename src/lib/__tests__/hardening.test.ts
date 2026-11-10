@@ -134,3 +134,31 @@ describe("resume is atomic and validated", () => {
     expect((await POST(json("/api/invoices/resume", "POST", { invoiceId: id, action: "approve" }))).status).toBe(200);
   });
 });
+
+describe("last-owner guard under concurrency", () => {
+  it("two owners removing each other in parallel leaves one owner", async () => {
+    const { removeMember } = await import("@/lib/auth/orgs");
+    for (let i = 0; i < 5; i++) {
+      const org = await makeOrg();
+      const a = await makeMember(org, "owner");
+      const b = await makeMember(org, "owner");
+      const [r1, r2] = await Promise.all([removeMember(org, "owner", b.email), removeMember(org, "owner", a.email)]);
+      expect([r1.ok, r2.ok].filter(Boolean)).toHaveLength(1);
+      const owners = await getDb().select().from(t.memberships).where(and(eq(t.memberships.orgId, org), eq(t.memberships.role, "owner")));
+      expect(owners).toHaveLength(1);
+    }
+  });
+
+  it("two owners demoting each other in parallel leaves one owner", async () => {
+    const { changeMemberRole } = await import("@/lib/auth/users");
+    for (let i = 0; i < 5; i++) {
+      const org = await makeOrg();
+      const a = await makeMember(org, "owner");
+      const b = await makeMember(org, "owner");
+      const [r1, r2] = await Promise.all([changeMemberRole(org, "owner", b.email, "member"), changeMemberRole(org, "owner", a.email, "member")]);
+      expect([r1.ok, r2.ok].filter(Boolean)).toHaveLength(1);
+      const owners = await getDb().select().from(t.memberships).where(and(eq(t.memberships.orgId, org), eq(t.memberships.role, "owner")));
+      expect(owners).toHaveLength(1);
+    }
+  });
+});

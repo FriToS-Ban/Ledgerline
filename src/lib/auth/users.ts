@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, asc, eq, gt, inArray, isNull, notLike, sql } from "drizzle-orm";
-import { getDb, databaseUrl, query } from "@/lib/db/client";
+import { getDb, databaseUrl } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import { DEMO_DOMAIN, DEMO_ORGS, DEMO_USERS } from "./demo-users";
 import { hashPassword } from "./hash";
@@ -254,14 +254,16 @@ export async function changeMemberRole(orgId: string, actorRole: OrgRole, email:
   if (actorRole !== "owner" && (role === "owner" || target.role === "owner")) {
     return { ok: false, status: 403, error: "Only an owner can grant or change the owner role." };
   }
-  const rows = await query(
-    `UPDATE memberships SET role = $1::membership_role
-     WHERE org_id = $2 AND user_id = $3
-       AND (role <> 'owner' OR $1::text = 'owner' OR (SELECT COUNT(*) FROM memberships WHERE org_id = $2 AND role = 'owner') > 1)
-     RETURNING user_id`,
-    [role, orgId, target.userId],
-  );
-  if (rows.length !== 1) return { ok: false, status: 409, error: "Cannot remove the last owner. Make someone else an owner first." };
+  const changed = await getDb().transaction(async (tx) => {
+    // Serialize on the org row so two concurrent demotions can't each see "another owner exists".
+    await tx.select({ id: t.organizations.id }).from(t.organizations).where(eq(t.organizations.id, orgId)).for("update");
+    const res = await tx.execute(sql`UPDATE memberships SET role = ${role}::membership_role
+     WHERE org_id = ${orgId} AND user_id = ${target.userId}
+       AND (role <> 'owner' OR ${role}::text = 'owner' OR (SELECT COUNT(*) FROM memberships WHERE org_id = ${orgId} AND role = 'owner') > 1)
+     RETURNING user_id`);
+    return res.rows.length;
+  });
+  if (changed !== 1) return { ok: false, status: 409, error: "Cannot remove the last owner. Make someone else an owner first." };
   return { ok: true, user: { email: e, name: target.name ?? "", role } };
 }
 

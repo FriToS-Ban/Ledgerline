@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { and, asc, eq, gt, isNotNull, isNull } from "drizzle-orm";
-import { getDb, query } from "@/lib/db/client";
+import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
+import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import { seedOrgDefaults } from "@/lib/db/seed";
 import { getStorage, keyBelongsToOrg } from "@/lib/storage";
@@ -80,14 +80,15 @@ export async function leaveOrg(orgId: string, userId: string) {
 }
 
 async function dropMembership(orgId: string, userId: string): Promise<{ ok: true; userId: string } | Failure> {
-  // The last-owner guard lives inside the DELETE, so two concurrent removals can't both succeed.
-  const rows = await query(
-    `DELETE FROM memberships WHERE org_id = $1 AND user_id = $2
-       AND (role <> 'owner' OR (SELECT COUNT(*) FROM memberships WHERE org_id = $1 AND role = 'owner') > 1)
-     RETURNING user_id`,
-    [orgId, userId],
-  );
-  if (rows.length !== 1) return fail(409, "Cannot remove the last owner. Make someone else an owner first.");
+  // Serialize on the org row, then count owners: two owners removing each other can't both pass the guard.
+  const removed = await getDb().transaction(async (tx) => {
+    await tx.select({ id: t.organizations.id }).from(t.organizations).where(eq(t.organizations.id, orgId)).for("update");
+    const res = await tx.execute(sql`DELETE FROM memberships WHERE org_id = ${orgId} AND user_id = ${userId}
+       AND (role <> 'owner' OR (SELECT COUNT(*) FROM memberships WHERE org_id = ${orgId} AND role = 'owner') > 1)
+     RETURNING user_id`);
+    return res.rows.length;
+  });
+  if (removed !== 1) return fail(409, "Cannot remove the last owner. Make someone else an owner first.");
   const [u] = await getDb().select({ name: t.users.name }).from(t.users).where(eq(t.users.id, userId));
   await ensureMembership(userId, u?.name || "Personal");
   return { ok: true, userId };
