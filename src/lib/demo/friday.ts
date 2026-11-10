@@ -1,6 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { randomUUID } from "node:crypto";
-import { ensureSchema, rawDbClient } from "@/lib/db/client";
+import { query } from "@/lib/db/client";
 import { seedDatabase } from "@/lib/db/seed";
 import { importMaster } from "@/lib/master/import";
 import { ingestRawEmail } from "@/lib/email/ingest";
@@ -200,15 +200,14 @@ function toEml(s: Spec, i: number, pdf: Uint8Array, batch: string) {
 }
 
 /** Load the Friday book and drop every invoice into the inbox (queued, not yet processed). */
-export async function loadFridayInbox() {
-  await ensureSchema();
-  await seedDatabase();
-  const db = rawDbClient();
-  const existing = await db.execute("SELECT COUNT(*) c FROM eval_cases");
-  if (Number(existing.rows[0].c) > 0) return { alreadyLoaded: true, invoices: Number(existing.rows[0].c) };
+export async function loadFridayInbox(orgId: string) {
+  await seedDatabase(orgId);
+  const existing = await query<{ c: string }>("SELECT COUNT(*) c FROM eval_cases WHERE org_id = $1", [orgId]);
+  if (Number(existing[0].c) > 0) return { alreadyLoaded: true, invoices: Number(existing[0].c) };
 
   const { specs, pos } = buildSpecs();
   await importMaster(
+    orgId,
     [
       { name: "vendors.csv", text: csv([["name", "approved", "currency"], ...VENDORS.map((v) => [v.name, v.approved, v.currency])]) },
       {
@@ -227,13 +226,17 @@ export async function loadFridayInbox() {
   for (const s of specs) {
     i++;
     const pdf = await renderPdf(s);
-    const res = await ingestRawEmail(toEml(s, i, pdf, batch), "cli");
+    const res = await ingestRawEmail(orgId, toEml(s, i, pdf, batch), "cli");
     const invoiceId = res.invoiceIds[0];
     if (!invoiceId) continue;
-    await db.execute({
-      sql: "INSERT INTO eval_cases (invoice_id,scenario,expected,truth,batch) VALUES (?,?,?,?,?)",
-      args: [invoiceId, s.scenario, JSON.stringify(s.expected), JSON.stringify(s.truth), batch],
-    });
+    await query("INSERT INTO eval_cases (org_id,invoice_id,scenario,expected,truth,batch) VALUES ($1,$2,$3,$4,$5,$6)", [
+      orgId,
+      invoiceId,
+      s.scenario,
+      JSON.stringify(s.expected),
+      JSON.stringify(s.truth),
+      batch,
+    ]);
   }
   return { alreadyLoaded: false, invoices: specs.length };
 }

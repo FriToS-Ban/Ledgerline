@@ -1,19 +1,15 @@
-import { createHash, timingSafeEqual } from "node:crypto";
-import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
-import { dbConfig, rawDbClient } from "@/lib/db/client";
-import { ensureAuthSchema } from "./db";
-import { authEnabled, COOKIE, DEFAULT_LIMITS, hashPassword, isRole, type Role } from "./session";
-import { resolveSession, type Actor } from "./sessions";
+import { createHash, randomBytes } from "node:crypto";
+import { and, asc, eq, gt, inArray, isNull, notLike, sql } from "drizzle-orm";
+import { getDb, databaseUrl } from "@/lib/db/client";
+import * as t from "@/lib/db/schema";
+import { DEMO_DOMAIN, DEMO_ORGS, DEMO_USERS } from "./demo-users";
+import { hashPassword } from "./hash";
+import { DEFAULT_LIMITS, isRole, type Role } from "./roles";
 
-export type { Actor } from "./sessions";
+export type OrgRole = "owner" | "admin" | "member";
 
-const DEMO_DOMAIN = "@ledgerline.demo";
-const DEMO = [
-  { email: `clerk${DEMO_DOMAIN}`, name: "Casey Clerk", role: "clerk" as Role },
-  { email: `approver${DEMO_DOMAIN}`, name: "Avery Approver", role: "approver" as Role },
-  { email: `admin${DEMO_DOMAIN}`, name: "Alex Admin", role: "admin" as Role },
-];
+/** The legacy app role (clerk / approver / admin) on users.role. Informational only: authorization uses memberships.role. */
+export type UserSummary = { email: string; name: string; role: Role };
 
 /** Demo accounts exist (and can sign in) only with DEMO_USERS=1, in every environment. */
 export const demoUsersEnabled = () => process.env.DEMO_USERS === "1";
@@ -24,163 +20,264 @@ export const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const seeded = new Set<string>();
 
 export async function ensureUsers() {
-  await ensureAuthSchema();
   if (!demoUsersEnabled()) return;
-  const key = dbConfig().url;
+  const key = databaseUrl();
   if (seeded.has(key)) return;
-  const db = rawDbClient();
+  const db = getDb();
   const pw = process.env.DEMO_PASSWORD || "ledgerline";
-  for (const u of DEMO) {
-    const exists = (await db.execute({ sql: "SELECT 1 FROM users WHERE email = ?", args: [u.email] })).rows.length;
-    if (exists) continue;
-    await db.execute({
-      sql: "INSERT OR IGNORE INTO users (email,name,role,password_hash,created_at) VALUES (?,?,?,?,?)",
-      args: [u.email, u.name, u.role, await hashPassword(pw), Date.now()],
-    });
+  const orgIds: Record<string, string> = {};
+  for (const o of DEMO_ORGS) {
+    await db.insert(t.organizations).values(o).onConflictDoNothing({ target: t.organizations.slug });
+    const [row] = await db.select({ id: t.organizations.id }).from(t.organizations).where(eq(t.organizations.slug, o.slug));
+    orgIds[o.slug] = row.id;
+  }
+  for (const u of DEMO_USERS) {
+    await db
+      .insert(t.users)
+      .values({ email: u.email, name: u.name, role: u.role, passwordHash: await hashPassword(pw), emailVerified: new Date() })
+      .onConflictDoNothing({ target: t.users.email });
+    const [row] = await db.select({ id: t.users.id }).from(t.users).where(eq(t.users.email, u.email));
+    await db
+      .insert(t.memberships)
+      .values({ orgId: orgIds[u.org], userId: row.id, role: u.membership })
+      .onConflictDoNothing({ target: [t.memberships.orgId, t.memberships.userId] });
   }
   seeded.add(key);
 }
 
-export type UserRecord = Actor & { hash: string };
+export type UserRecord = UserSummary & { id: string; hash: string; tokenVersion: number };
 
 /** Looks a user up for sign-in. Demo accounts are invisible unless DEMO_USERS=1. */
 export async function findUser(email: string): Promise<UserRecord | null> {
   await ensureUsers();
   const e = normalizeEmail(email);
   if (isDemoEmail(e) && !demoUsersEnabled()) return null;
-  const r = (await rawDbClient().execute({ sql: "SELECT * FROM users WHERE email = ?", args: [e] })).rows[0];
+  const [r] = await getDb().select().from(t.users).where(eq(t.users.email, e));
   if (!r || !isRole(r.role)) return null;
-  return { email: String(r.email), name: String(r.name), role: r.role, hash: String(r.password_hash) };
+  return { id: r.id, email: r.email, name: r.name ?? "", role: r.role, hash: r.passwordHash ?? "", tokenVersion: r.tokenVersion };
 }
 
-/** Creates a user. Returns null when the email is already taken. */
-export async function createUser(u: { email: string; name: string; password: string; role: Role }): Promise<Actor | null> {
+/* ------------------------------------------------------------- memberships */
+
+export type Membership = { orgId: string; orgRole: OrgRole };
+
+/** The user's membership of `orgId`, or null. This is the only place an active org is authorised. */
+export async function membershipFor(userId: string, orgId: string): Promise<Membership | null> {
+  const [m] = await getDb()
+    .select({ orgId: t.memberships.orgId, orgRole: t.memberships.role })
+    .from(t.memberships)
+    .where(and(eq(t.memberships.userId, userId), eq(t.memberships.orgId, orgId)));
+  return m ?? null;
+}
+
+/** The default active org: the user's earliest membership. */
+export async function firstMembership(userId: string): Promise<Membership | null> {
+  const [m] = await getDb()
+    .select({ orgId: t.memberships.orgId, orgRole: t.memberships.role })
+    .from(t.memberships)
+    .where(eq(t.memberships.userId, userId))
+    .orderBy(asc(t.memberships.createdAt), asc(t.memberships.orgId))
+    .limit(1);
+  return m ?? null;
+}
+
+export async function listMemberships(userId: string) {
+  return getDb()
+    .select({ orgId: t.memberships.orgId, orgRole: t.memberships.role, name: t.organizations.name, slug: t.organizations.slug })
+    .from(t.memberships)
+    .innerJoin(t.organizations, eq(t.organizations.id, t.memberships.orgId))
+    .where(eq(t.memberships.userId, userId))
+    .orderBy(asc(t.memberships.createdAt), asc(t.memberships.orgId));
+}
+
+/* ----------------------------------------------------------------- invites */
+
+export const hashInviteToken = (token: string) => createHash("sha256").update(token).digest("hex");
+
+export type ValidInvite = { id: string; orgId: string; role: OrgRole };
+
+/** An unaccepted, unexpired invite for exactly this email, looked up by the sha256 of its token. */
+export async function findInvite(token: string, email: string): Promise<ValidInvite | null> {
+  const [inv] = await getDb()
+    .select({ id: t.invites.id, orgId: t.invites.orgId, role: t.invites.role })
+    .from(t.invites)
+    .where(
+      and(
+        eq(t.invites.tokenHash, hashInviteToken(token)),
+        eq(t.invites.email, normalizeEmail(email)),
+        isNull(t.invites.acceptedAt),
+        gt(t.invites.expiresAt, new Date()),
+      ),
+    );
+  return inv ?? null;
+}
+
+/* ------------------------------------------------------------------- users */
+
+export type CreatedUser = UserSummary & { id: string; tokenVersion: number };
+
+class InviteTaken extends Error {}
+
+/**
+ * Creates a user and its tenancy in one transaction. Without an invite the user gets a personal
+ * organization and an `owner` membership; with a valid invite they join that organization with the
+ * invited role (the invite is consumed atomically). Returns null when the email is already taken or
+ * the invite was used up by someone else in the meantime.
+ */
+export async function createUser(u: {
+  email: string;
+  name: string;
+  password: string;
+  role: Role;
+  invite?: ValidInvite;
+}): Promise<CreatedUser | null> {
   await ensureUsers();
   const email = normalizeEmail(u.email);
-  const r = await rawDbClient().execute({
-    sql: "INSERT OR IGNORE INTO users (email,name,role,password_hash,created_at,password_changed_at) VALUES (?,?,?,?,?,?)",
-    args: [email, u.name, u.role, await hashPassword(u.password), Date.now(), Date.now()],
-  });
-  return r.rowsAffected === 1 ? { email, name: u.name, role: u.role } : null;
+  const passwordHash = await hashPassword(u.password);
+  try {
+    return await getDb().transaction(async (tx) => {
+      const rows = await tx
+        .insert(t.users)
+        .values({ email, name: u.name, role: u.role, passwordHash, passwordChangedAt: new Date() })
+        .onConflictDoNothing({ target: t.users.email })
+        .returning({ id: t.users.id, tokenVersion: t.users.tokenVersion });
+      if (rows.length !== 1) return null;
+      const { id, tokenVersion } = rows[0];
+      if (u.invite) {
+        const used = await tx
+          .update(t.invites)
+          .set({ acceptedAt: new Date() })
+          .where(and(eq(t.invites.id, u.invite.id), isNull(t.invites.acceptedAt)))
+          .returning({ id: t.invites.id });
+        if (used.length !== 1) throw new InviteTaken();
+        await tx.insert(t.memberships).values({ orgId: u.invite.orgId, userId: id, role: u.invite.role });
+      } else {
+        const [org] = await tx
+          .insert(t.organizations)
+          .values({ name: `${u.name.trim() || email}'s workspace`, slug: `personal-${randomBytes(6).toString("hex")}` })
+          .returning({ id: t.organizations.id });
+        await tx.insert(t.memberships).values({ orgId: org.id, userId: id, role: "owner" });
+      }
+      return { id, email, name: u.name, role: u.role, tokenVersion };
+    });
+  } catch (e) {
+    if (e instanceof InviteTaken) return null;
+    throw e;
+  }
 }
 
 /**
- * SQL condition for admins who can actually sign in. Demo rows stay in the table after
+ * Condition for admins who can actually sign in. Demo rows stay in the table after
  * DEMO_USERS is switched off, so they must not count then. `includeDemo: false` never counts them.
  */
-function usableAdminSql(includeDemo = demoUsersEnabled()) {
-  return includeDemo ? "role = 'admin'" : `role = 'admin' AND email NOT LIKE '%${DEMO_DOMAIN}'`;
+function usableAdmin(includeDemo = demoUsersEnabled()) {
+  return includeDemo
+    ? eq(t.users.role, "admin")
+    : and(eq(t.users.role, "admin"), notLike(t.users.email, `%${DEMO_DOMAIN}`));
 }
 
 /** Admins that are not demo accounts. */
 export async function realAdminCount(): Promise<number> {
   await ensureUsers();
-  return Number((await rawDbClient().execute(`SELECT COUNT(*) c FROM users WHERE ${usableAdminSql(false)}`)).rows[0].c);
+  const [r] = await getDb().select({ c: sql<number>`count(*)::int` }).from(t.users).where(usableAdmin(false));
+  return r.c;
 }
-
-export const MIN_BOOTSTRAP_TOKEN_LENGTH = 24;
 
 /**
- * True when `token` equals BOOTSTRAP_ADMIN_TOKEN (constant-time, over sha256 digests so lengths
- * never leak) AND no real (non-demo) admin exists yet. Tokens shorter than 24 chars are ignored.
+ * Sets a new password and bumps tokenVersion in one statement, so every JWT issued before this
+ * moment is rejected. Returns the new version (callers re-issue the caller's own token with it).
  */
-export async function bootstrapTokenAccepted(token: string): Promise<boolean> {
-  const expected = process.env.BOOTSTRAP_ADMIN_TOKEN?.trim() ?? "";
-  const digest = (v: string) => createHash("sha256").update(v).digest();
-  const match = timingSafeEqual(digest(token), digest(expected));
-  if (!match || expected.length < MIN_BOOTSTRAP_TOKEN_LENGTH) return false;
-  return (await realAdminCount()) === 0;
+export async function setPassword(email: string, password: string): Promise<number> {
+  const [r] = await getDb()
+    .update(t.users)
+    .set({ passwordHash: await hashPassword(password), passwordChangedAt: new Date(), tokenVersion: sql`${t.users.tokenVersion} + 1` })
+    .where(eq(t.users.email, normalizeEmail(email)))
+    .returning({ v: t.users.tokenVersion });
+  return r.v;
 }
 
-export async function setPassword(email: string, password: string) {
-  await ensureAuthSchema();
-  await rawDbClient().execute({
-    sql: "UPDATE users SET password_hash = ?, password_changed_at = ? WHERE email = ?",
-    args: [await hashPassword(password), Date.now(), normalizeEmail(email)],
-  });
+/** "Sign out everywhere": invalidates every JWT of this user. Returns the new version. */
+export async function bumpTokenVersion(userId: string): Promise<number> {
+  const [r] = await getDb()
+    .update(t.users)
+    .set({ tokenVersion: sql`${t.users.tokenVersion} + 1` })
+    .where(eq(t.users.id, userId))
+    .returning({ v: t.users.tokenVersion });
+  return r.v;
 }
 
-export async function listUsers() {
+/** Members of one organization (nobody outside it), with their org role. */
+export async function listOrgMembers(orgId: string) {
   await ensureUsers();
-  const rows = (
-    await rawDbClient().execute("SELECT email, name, role, created_at FROM users ORDER BY created_at IS NULL, created_at, email")
-  ).rows;
+  const rows = await getDb()
+    .select({ email: t.users.email, name: t.users.name, role: t.memberships.role, createdAt: t.memberships.createdAt })
+    .from(t.memberships)
+    .innerJoin(t.users, eq(t.users.id, t.memberships.userId))
+    .where(eq(t.memberships.orgId, orgId))
+    .orderBy(asc(t.memberships.createdAt), asc(t.users.email));
   return rows
-    .filter((r) => demoUsersEnabled() || !isDemoEmail(String(r.email)))
-    .map((r) => ({
-      email: String(r.email),
-      name: String(r.name),
-      role: String(r.role) as Role,
-      createdAt: r.created_at == null ? null : new Date(Number(r.created_at)).toISOString(),
-    }));
+    .filter((r) => demoUsersEnabled() || !isDemoEmail(r.email))
+    .map((r) => ({ email: r.email, name: r.name ?? "", role: r.role as OrgRole, createdAt: r.createdAt.toISOString() }));
 }
 
 export type RoleChange =
-  | { ok: true; user: Actor }
-  | { ok: false; status: 404 | 409; error: string };
+  | { ok: true; user: { email: string; name: string; role: OrgRole } }
+  | { ok: false; status: 403 | 404 | 409; error: string };
 
 /**
- * Changes a user's role. Refuses (409) to demote the last remaining admin; the guard is inside
- * the UPDATE itself so two concurrent demotions can't both succeed.
+ * Changes a member's role in `orgId` (the caller's active org; someone who is not a member there
+ * is a 404, never touched). Admins cannot grant or remove `owner`; the last owner of an org cannot be
+ * demoted (the guard is inside the UPDATE, so two concurrent demotions can't both succeed).
  */
-export async function changeRole(email: string, role: Role): Promise<RoleChange> {
-  await ensureUsers();
+export async function changeMemberRole(orgId: string, actorRole: OrgRole, email: string, role: OrgRole): Promise<RoleChange> {
   const e = normalizeEmail(email);
-  const db = rawDbClient();
-  const existing = (await db.execute({ sql: "SELECT email, name, role FROM users WHERE email = ?", args: [e] })).rows[0];
-  if (!existing || (isDemoEmail(e) && !demoUsersEnabled())) return { ok: false, status: 404, error: "No user with that email" };
-  const r = await db.execute({
-    sql: `UPDATE users SET role = ?
-          WHERE email = ?
-            AND (role != 'admin' OR ? = 'admin' OR (SELECT COUNT(*) FROM users WHERE ${usableAdminSql()}) > 1)`,
-    args: [role, e, role],
+  const [target] = await getDb()
+    .select({ userId: t.users.id, name: t.users.name, role: t.memberships.role })
+    .from(t.memberships)
+    .innerJoin(t.users, eq(t.users.id, t.memberships.userId))
+    .where(and(eq(t.memberships.orgId, orgId), eq(t.users.email, e)));
+  if (!target || (isDemoEmail(e) && !demoUsersEnabled())) return { ok: false, status: 404, error: "No member with that email" };
+  if (actorRole !== "owner" && (role === "owner" || target.role === "owner")) {
+    return { ok: false, status: 403, error: "Only an owner can grant or change the owner role." };
+  }
+  const changed = await getDb().transaction(async (tx) => {
+    // Serialize on the org row so two concurrent demotions can't each see "another owner exists".
+    await tx.select({ id: t.organizations.id }).from(t.organizations).where(eq(t.organizations.id, orgId)).for("update");
+    const res = await tx.execute(sql`UPDATE memberships SET role = ${role}::membership_role
+     WHERE org_id = ${orgId} AND user_id = ${target.userId}
+       AND (role <> 'owner' OR ${role}::text = 'owner' OR (SELECT COUNT(*) FROM memberships WHERE org_id = ${orgId} AND role = 'owner') > 1)
+     RETURNING user_id`);
+    return res.rows.length;
   });
-  if (r.rowsAffected !== 1) return { ok: false, status: 409, error: "Cannot remove the last admin. Make someone else an admin first." };
-  return { ok: true, user: { email: e, name: String(existing.name), role } };
+  if (changed !== 1) return { ok: false, status: 409, error: "Cannot remove the last owner. Make someone else an owner first." };
+  return { ok: true, user: { email: e, name: target.name ?? "", role } };
 }
 
-/** The signed-in user and session id, verified against the sessions table (not request headers). */
-export async function getSession(): Promise<(Actor & { sid: string }) | null> {
-  if (!authEnabled()) return { email: "auth-disabled@local", name: "Local (auth off)", role: "admin", sid: "" };
-  const token = (await cookies()).get(COOKIE)?.value;
-  const s = await resolveSession(token);
-  // A demo session minted while DEMO_USERS=1 dies as soon as demo accounts are switched off.
-  if (s && isDemoEmail(s.email) && !demoUsersEnabled()) return null;
-  return s;
-}
-
-/** The signed-in user, or null. Every call checks the DB session (revocation, idle/absolute expiry). */
-export async function getActor(): Promise<Actor | null> {
-  const s = await getSession();
-  return s ? { email: s.email, name: s.name, role: s.role } : null;
-}
-
-export async function approvalLimit(role: Role): Promise<number> {
-  const rows = (
-    await rawDbClient().execute("SELECT key,value FROM policy_rules WHERE key IN ('clerkLimit','approverLimit')")
-  ).rows;
+/** Dollar ceiling an org role may release without a more senior person: owners unlimited, admins the approver limit, members the (lower) member limit. */
+export async function approvalLimit(orgId: string, orgRole: OrgRole): Promise<number> {
+  if (orgRole === "owner") return Infinity;
+  const rows = await getDb()
+    .select({ key: t.policyRules.key, value: t.policyRules.value })
+    .from(t.policyRules)
+    .where(and(eq(t.policyRules.orgId, orgId), inArray(t.policyRules.key, ["clerkLimit", "approverLimit"])));
   const get = (k: string, d: number) => {
     const row = rows.find((r) => r.key === k);
-    return row ? Number(row.value) : d;
+    if (!row) return d;
+    const n = Number(row.value);
+    return Number.isFinite(n) && n >= 0 ? n : 0; // a corrupt limit must block, never wave everything through
   };
-  if (role === "clerk") return get("clerkLimit", DEFAULT_LIMITS.clerk);
-  if (role === "approver") return get("approverLimit", DEFAULT_LIMITS.approver);
-  return Infinity;
+  return orgRole === "admin" ? get("approverLimit", DEFAULT_LIMITS.approver) : get("clerkLimit", DEFAULT_LIMITS.clerk);
 }
 
-/**
- * Route-level session check for handlers that any signed-in role may use. proxy.ts only checks
- * the cookie signature, so every API handler must call this (or denyUnless/getActor) to honour
- * revocation, idle timeout and sign-out. Returns a 401 response to send, or null when signed in.
- */
-export async function requireSignedIn(): Promise<NextResponse | null> {
-  return (await getActor()) ? null : NextResponse.json({ error: "sign in required" }, { status: 401 });
-}
-
-/** Returns a 403-style message when the actor's role is not in `allowed`, else null. */
-export async function denyUnless(allowed: Role[]): Promise<{ status: number; error: string } | null> {
-  const actor = await getActor();
-  if (!actor) return { status: 401, error: "sign in required" };
-  if (!allowed.includes(actor.role)) return { status: 403, error: `requires role: ${allowed.join(" or ")}` };
-  return null;
+/** Gives a user with no membership (legacy rows) a personal organization, so every session has an active org. */
+export async function ensureMembership(userId: string, label: string): Promise<Membership> {
+  const existing = await firstMembership(userId);
+  if (existing) return existing;
+  const db = getDb();
+  const [org] = await db
+    .insert(t.organizations)
+    .values({ name: `${label}'s workspace`, slug: `personal-${randomBytes(6).toString("hex")}` })
+    .returning({ id: t.organizations.id });
+  await db.insert(t.memberships).values({ orgId: org.id, userId, role: "owner" }).onConflictDoNothing();
+  return (await firstMembership(userId))!;
 }

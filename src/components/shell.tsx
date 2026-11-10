@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut, ShieldCheck } from "lucide-react";
+import { signOut as authSignOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
 import { Flyers } from "@/components/scene";
 import { safeNext } from "@/lib/auth/safe-next";
+import { OrgSwitcher } from "@/components/org-switcher";
 
 const NAV = [
   { href: "/", label: "Command" },
@@ -76,7 +78,7 @@ function PrimaryNav({ path }: { path: string }) {
                 href={n.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex min-h-11 items-center whitespace-nowrap rounded-full px-4 text-[0.9375rem] transition-colors",
+                  "flex min-h-11 items-center whitespace-nowrap rounded-full px-4 text-[0.9375rem] xl:px-3 transition-colors",
                   active ? "font-medium text-foreground" : "text-text-mute hover:bg-muted hover:text-foreground",
                 )}
               >
@@ -94,7 +96,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const [me, setMe] = useState<Me>(null);
-  const isLogin = path === "/login";
+  // pages that render their own chrome and must work signed out
+  const isLogin = path === "/login" || path.startsWith("/invite/");
 
   useEffect(() => {
     if (isLogin) return;
@@ -111,7 +114,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, [path, isLogin, router]);
 
   async function signOut() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await authSignOut({ redirect: false });
     setMe(null);
     router.replace("/login");
     router.refresh();
@@ -144,7 +147,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <Flyers variant="app" />
       {skip}
       <header className="sticky top-0 z-40 px-3 pt-3 sm:px-6">
-        <div className="glass mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl px-3 py-2 shadow-[0_10px_40px_-12px_var(--neon-violet)] xl:flex-nowrap xl:rounded-full xl:px-4">
+        <div className="glass mx-auto flex max-w-[1240px] flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl px-3 py-2 shadow-[0_10px_40px_-12px_var(--neon-violet)] xl:flex-nowrap xl:gap-x-3 xl:rounded-full xl:px-4">
           <Link href="/" aria-label="Ledgerline, home" className="order-1 flex min-h-11 items-center gap-2 rounded-full pr-2">
             <span className="grid size-8 place-items-center rounded-full bg-[image:var(--gradient-neon)] text-primary-foreground shadow-[var(--glow-violet)]">
               <ShieldCheck className="size-4.5" aria-hidden />
@@ -155,6 +158,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <div className="order-2 ml-auto flex items-center gap-2 text-sm xl:order-3 xl:ml-0">
             {me && (
               <>
+                {!me.email.startsWith("auth-disabled") && <OrgSwitcher key={me.email} />}
                 <span className="hidden max-w-[14rem] truncate text-text-mute sm:inline xl:sr-only" title={me.email}>
                   {me.name}
                 </span>
@@ -164,10 +168,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 {!me.email.startsWith("auth-disabled") && (
                   <button
                     onClick={() => void signOut()}
-                    className="flex min-h-11 items-center gap-1.5 rounded-full px-3 text-text-mute transition-colors hover:bg-muted hover:text-foreground"
+                    aria-label="Sign out"
+                    className="flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-full px-2 text-text-mute sm:px-3 transition-colors hover:bg-muted hover:text-foreground"
                   >
                     <LogOut className="size-4" aria-hidden />
-                    <span>Sign out</span>
+                    <span className="hidden sm:inline xl:hidden">Sign out</span>
                   </button>
                 )}
               </>

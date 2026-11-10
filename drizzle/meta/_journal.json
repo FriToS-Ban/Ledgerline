@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1794339270736,
+      "tag": "0000_parched_maverick",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794340357413,
+      "tag": "0001_auth_js_token_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794347099093,
+      "tag": "0002_org_intake_secret",
+      "breakpoints": true
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import { DEMO_CASES } from "@/lib/fixtures/cases";
 import { StatusBadge } from "@/components/status-badge";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 type Row = {
   id: string;
@@ -30,26 +31,33 @@ export default function QueuePage() {
     void load();
   }, []);
 
+  /** Post to the processor; surface failures instead of leaving the UI stuck on "Reading the file…". */
+  async function submit(init: RequestInit) {
+    try {
+      const res = await fetch("/api/invoices/process", { method: "POST", ...init });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.invoiceId) {
+        toast.error(data?.error ?? "The invoice could not be processed. Please try again.");
+        return;
+      }
+      router.push(`/cases/${data.invoiceId}`);
+    } catch {
+      toast.error("Could not reach the server. Check your connection and try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function runDemo(id: string) {
     setBusy(id);
-    const res = await fetch("/api/invoices/process", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ demoId: id }),
-    });
-    const data = await res.json();
-    setBusy(null);
-    router.push(`/cases/${data.invoiceId}`);
+    await submit({ headers: { "content-type": "application/json" }, body: JSON.stringify({ demoId: id }) });
   }
 
   async function onUpload(file: File) {
     setBusy("upload");
     const form = new FormData();
     form.set("file", file);
-    const res = await fetch("/api/invoices/process", { method: "POST", body: form });
-    const data = await res.json();
-    setBusy(null);
-    router.push(`/cases/${data.invoiceId}`);
+    await submit({ body: form });
   }
 
   return (

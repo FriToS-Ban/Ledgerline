@@ -2,28 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { createToken, hashPassword, readToken, verifyPassword } from "@/lib/auth/session";
+import { hashPassword, verifyPassword } from "@/lib/auth/hash";
 
-describe("sessions and passwords", () => {
-  it("round-trips a signed session", () => {
-    const t = createToken({ email: "a@b.c", name: "A", role: "approver" });
-    expect(readToken(t)).toMatchObject({ email: "a@b.c", role: "approver" });
-  });
-  it("rejects a tampered role", () => {
-    const t = createToken({ email: "a@b.c", name: "A", role: "clerk" });
-    const [body, sig] = t.split(".");
-    const forged = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(body, "base64url").toString()), role: "admin" })).toString("base64url");
-    expect(readToken(`${forged}.${sig}`)).toBeNull();
-    expect(readToken("garbage")).toBeNull();
-    expect(readToken(undefined)).toBeNull();
-  });
-  it("rejects an expired session", () => {
-    vi.useFakeTimers();
-    const t = createToken({ email: "a@b.c", name: "A", role: "clerk" });
-    vi.setSystemTime(Date.now() + 9 * 60 * 60 * 1000);
-    expect(readToken(t)).toBeNull();
-    vi.useRealTimers();
-  });
+describe("password hashing", () => {
   it("hashes passwords with a salt and verifies them", async () => {
     const h = await hashPassword("s3cret");
     expect(h).not.toContain("s3cret");
@@ -59,28 +40,33 @@ describe("ERP connector and approval limits (isolated temp cwd)", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     const { syncFromErp, syncErpIfDue } = await import("@/lib/master/erp");
-    const res = await syncFromErp();
+    const { makeOrg } = await import("@/test/orgs");
+    const orgId = await makeOrg();
+    const res = await syncFromErp(orgId);
     expect(res).toMatchObject({ vendors: 1, pos: 1 });
     expect(res.errors.join(" ")).toContain("Ghost Co");
     const call = fetchMock.mock.calls[0] as unknown as [string, { headers: Record<string, string> }];
     expect(call[1].headers.authorization).toBe("Bearer tok");
     // just synced -> not due again
-    expect(await syncErpIfDue()).toBeNull();
+    expect(await syncErpIfDue(orgId)).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces ERP outages instead of silently keeping stale data", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 503 })));
     const { syncFromErp } = await import("@/lib/master/erp");
-    await expect(syncFromErp()).rejects.toThrow("503");
+    const { makeOrg } = await import("@/test/orgs");
+    await expect(syncFromErp(await makeOrg())).rejects.toThrow("503");
   });
 
-  it("applies role approval limits from policy", async () => {
+  it("applies org-role approval limits from the org's own policy", async () => {
     const { seedDatabase } = await import("@/lib/db/seed");
     const { approvalLimit } = await import("@/lib/auth/users");
-    await seedDatabase();
-    expect(await approvalLimit("clerk")).toBe(5000);
-    expect(await approvalLimit("approver")).toBe(100000);
-    expect(await approvalLimit("admin")).toBe(Infinity);
+    const { makeOrg } = await import("@/test/orgs");
+    const orgId = await makeOrg();
+    await seedDatabase(orgId, { pdfs: false });
+    expect(await approvalLimit(orgId, "member")).toBe(5000);
+    expect(await approvalLimit(orgId, "admin")).toBe(100000);
+    expect(await approvalLimit(orgId, "owner")).toBe(Infinity);
   });
 });

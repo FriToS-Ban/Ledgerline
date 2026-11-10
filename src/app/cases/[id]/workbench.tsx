@@ -74,8 +74,10 @@ export function Workbench({ id }: { id: string }) {
   if (!data) return <p className="text-sm text-text-mute">Opening the guard file…</p>;
   const trace = data.decision?.trace;
   const brief = trace ? buildBrief(trace) : null;
-  const pdf = (data.invoice.pdfPath ?? "/demos/partial.pdf").replace(/^\/uploads\//, "/api/files/");
-  const isImage = /\.(png|jpe?g|webp|gif|bmp|tiff?)$/i.test(pdf);
+  // Uploads are storage keys (org/...) served by the authenticated files route; demo fixtures are static.
+  const stored = data.invoice.pdfPath ?? "/demos/partial.pdf";
+  const pdf = stored.startsWith("/") ? stored : `/api/files/${data.invoice.id}`;
+  const isImage = /\.(png|jpe?g|webp|gif|bmp|tiff?)$/i.test(stored);
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
@@ -291,7 +293,7 @@ export function Workbench({ id }: { id: string }) {
                 Override and release in full
               </Button>
               <Button variant="danger" onClick={() => void resume("reject")}>
-                Do not pay
+                Block payment
               </Button>
             </div>
           </div>

@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
-import { seedDatabase } from "@/lib/db/seed";
+import { seedOrgDefaults } from "@/lib/db/seed";
 import * as t from "@/lib/db/schema";
 import type { PipelineTrace } from "@/lib/invoice/schema";
-import { requireSignedIn } from "@/lib/auth/users";
+import { requireActor } from "@/lib/auth/guard";
 
 export async function GET() {
-  const unauth = await requireSignedIn();
-  if (unauth) return unauth;
-  await seedDatabase();
+  const g = await requireActor();
+  if (g.deny) return g.deny;
+  const { orgId } = g.actor;
+  await seedOrgDefaults(orgId);
   const db = getDb();
-  const invoices = await db.select().from(t.invoices).orderBy(desc(t.invoices.createdAt));
-  const decisions = await db.select().from(t.decisions);
+  const invoices = await db.select().from(t.invoices).where(eq(t.invoices.orgId, orgId)).orderBy(desc(t.invoices.createdAt));
+  const decisions = await db.select().from(t.decisions).where(eq(t.decisions.orgId, orgId));
   const dmap = new Map(decisions.map((d) => [d.invoiceId, d]));
   return NextResponse.json(
     invoices.map((inv) => {

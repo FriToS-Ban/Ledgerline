@@ -1,26 +1,32 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
+import { auth } from "@/auth";
 import { csrfProblem, isCsrfExempt } from "@/lib/auth/csrf";
-import { authEnabled, COOKIE, readToken } from "@/lib/auth/session";
+import { authEnabled } from "@/lib/auth/roles";
 
 /**
- * The gate in front of every page and API route. Deliberately DB-free: it checks only that the
- * session cookie is present, HMAC-signed with AUTH_SECRET and not past its absolute expiry, and
- * redirects/401s otherwise. The authoritative check (session row exists, not revoked, not idle,
- * current role from the users table) happens in getActor() inside each route, so revocation and
- * role changes take effect on the very next request.
+ * The gate in front of every page and API route. It wraps Auth.js's `auth`, which decodes the JWT
+ * cookie and runs the `jwt` callback (lib/auth/token.ts): a revoked token (stale tokenVersion),
+ * a deleted user or a session past its absolute lifetime therefore comes back as "signed out" here
+ * and on the very next request, not only inside route handlers (which re-check through guard.ts).
  *
- * It also rejects cross-origin mutating API requests (CSRF), except for the webhook routes that
- * authenticate with their own shared secret.
+ * It also rejects cross-origin mutating API requests (CSRF) before anything else, except for the
+ * webhook routes that authenticate with their own shared secret. Auth.js additionally protects its
+ * own sign-in/sign-out routes with a CSRF token.
  */
 
-// Pages and APIs reachable without a session.
+// Pages and APIs reachable without a session. /api/auth/* here is Auth.js's own surface
+// (session, csrf, providers, signin, callback, signout, error) plus register and me; password,
+// users and signout-everywhere are NOT listed, so they require a session.
 const OPEN = [
+  /^\/api\/health\/?$/,
   /^\/login(\/|$)/,
   /^\/register(\/|$)/,
-  /^\/api\/auth\/(login|register|logout|me)$/,
+  /^\/invite\/[^/]+\/?$/,
+  /^\/api\/invites\/preview\/?$/,
+  /^\/api\/auth\/(register|me|session|csrf|providers|signin|signout|callback|error)(\/|$)/,
 ];
 
-export function proxy(req: NextRequest) {
+const gate = auth((req) => {
   const { pathname } = req.nextUrl;
   // Identity is never taken from request headers; strip legacy ones anyway so nothing can rely on them.
   const forward = new Headers(req.headers);
@@ -34,8 +40,7 @@ export function proxy(req: NextRequest) {
 
   if (!authEnabled() || isCsrfExempt(pathname) || OPEN.some((r) => r.test(pathname))) return next();
 
-  // `sid` is required: cookies minted before DB sessions existed carry none and are refused.
-  if (!readToken(req.cookies.get(COOKIE)?.value)?.sid) {
+  if (!req.auth?.userId) {
     if (pathname.startsWith("/api/")) return NextResponse.json({ error: "sign in required" }, { status: 401 });
     const url = new URL("/login", req.url);
     url.search = "";
@@ -43,6 +48,17 @@ export function proxy(req: NextRequest) {
     return NextResponse.redirect(url);
   }
   return next();
+});
+
+type Gate = (req: NextRequest, ev: NextFetchEvent) => Promise<Response | undefined>;
+
+/**
+ * With a lazily built Auth.js config (our `NextAuth(() => ...)`), `auth(handler)` returns a Promise
+ * of the wrapped handler rather than the handler itself (the types say otherwise), so resolve it
+ * here; awaiting a plain function, should a future version return one, is harmless.
+ */
+export async function proxy(req: NextRequest, ev: NextFetchEvent) {
+  return ((await gate) as unknown as Gate)(req, ev);
 }
 
 export const config = {

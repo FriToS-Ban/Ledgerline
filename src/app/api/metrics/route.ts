@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { computeMetrics } from "@/lib/metrics";
-import { requireSignedIn } from "@/lib/auth/users";
+import { requireActor } from "@/lib/auth/guard";
 
 export async function GET() {
-  const unauth = await requireSignedIn();
-  if (unauth) return unauth;
-  return NextResponse.json(await computeMetrics());
+  const g = await requireActor();
+  if (g.deny) return g.deny;
+  return NextResponse.json(await computeMetrics(g.actor.orgId));
 }

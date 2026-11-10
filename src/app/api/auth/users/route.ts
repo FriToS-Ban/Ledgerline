@@ -1,22 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readJson, roleChangeSchema, validationError } from "@/lib/auth/schemas";
-import type { Role } from "@/lib/auth/session";
-import { changeRole, denyUnless, listUsers } from "@/lib/auth/users";
+import { requireOrgRole } from "@/lib/auth/guard";
+import { removeMember } from "@/lib/auth/orgs";
+import { changeMemberRole, listOrgMembers } from "@/lib/auth/users";
 
-/** Admin only: every account with its role. */
+/** Owner / admin only: the members of the caller's organization with their org role. */
 export async function GET() {
-  const denied = await denyUnless(["admin"]);
-  if (denied) return NextResponse.json({ error: denied.error }, { status: denied.status });
-  return NextResponse.json({ users: await listUsers() }, { headers: { "cache-control": "no-store" } });
+  const g = await requireOrgRole();
+  if (g.deny) return g.deny;
+  return NextResponse.json({ users: await listOrgMembers(g.actor.orgId) }, { headers: { "cache-control": "no-store" } });
 }
 
-/** Admin only: `{ email, role }` sets that user's role. Demoting the last admin is refused (409). */
+/** Owner / admin only: `{ email, role }` sets that member's org role. Demoting the last owner is refused (409). */
 export async function PATCH(req: NextRequest) {
-  const denied = await denyUnless(["admin"]);
-  if (denied) return NextResponse.json({ error: denied.error }, { status: denied.status });
+  const g = await requireOrgRole();
+  if (g.deny) return g.deny;
   const parsed = roleChangeSchema.safeParse(await readJson(req));
   if (!parsed.success) return validationError(parsed.error);
-  const r = await changeRole(parsed.data.email, parsed.data.role as Role);
+  const r = await changeMemberRole(g.actor.orgId, g.actor.orgRole, parsed.data.email, parsed.data.role);
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
   return NextResponse.json({ user: r.user });
+}
+
+/** Owner / admin: `{ email }` removes that member from the caller's organization (admins cannot remove owners; the last owner stays). */
+export async function DELETE(req: NextRequest) {
+  const g = await requireOrgRole();
+  if (g.deny) return g.deny;
+  const body = (await readJson(req)) as { email?: unknown };
+  const r = await removeMember(g.actor.orgId, g.actor.orgRole, typeof body.email === "string" ? body.email : "");
+  if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
+  return NextResponse.json({ ok: true });
 }

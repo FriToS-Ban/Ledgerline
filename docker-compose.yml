@@ -1,0 +1,71 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (any value for local dev; the containerized app refuses postgres:postgres)}
+      POSTGRES_DB: ${POSTGRES_DB:-ledgerline}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # DEV ONLY (profile "dev"): `docker compose --profile dev up -d s3`. s3mock performs no credential
+  # checks and keeps objects in a temp dir (lost when the container is recreated). Production uses any
+  # real S3 endpoint (AWS S3, Cloudflare R2, MinIO, ...): point the S3_* variables at it.
+  # With the mock, the containerized app also needs S3_ALLOW_INSECURE=1 (plain http inside the network).
+  s3:
+    profiles: ["dev"]
+    image: adobe/s3mock:5.2.3
+    restart: unless-stopped
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: ${S3_BUCKET:-ledgerline}
+    ports:
+      - "127.0.0.1:${S3_PORT:-9090}:9090"
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      s3:
+        condition: service_started
+        required: false
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Container wiring wins over .env (which may hold localhost URLs for `npm run dev`).
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ledgerline}
+      S3_ENDPOINT: ${APP_S3_ENDPOINT:-http://s3:9090}
+      S3_FORCE_PATH_STYLE: ${APP_S3_FORCE_PATH_STYLE:-1}
+      S3_BUCKET: ${S3_BUCKET:-ledgerline}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-local}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-local-secret}
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET (>= 32 chars) in .env}
+      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:?set INNGEST_SIGNING_KEY in .env}
+      S3_ALLOW_INSECURE: ${S3_ALLOW_INSECURE:-0}
+      AUTH_ALLOW_HTTP: ${AUTH_ALLOW_HTTP:-0}
+      APP_ORIGINS: ${APP_ORIGINS:-}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
+      DEMO_USERS: ${DEMO_USERS:-0}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 6
+
+volumes:
+  pgdata:

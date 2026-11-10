@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +19,7 @@ const DEMO = [
 ];
 
 type Mode = "login" | "register";
-type Fields = Partial<Record<"email" | "name" | "password" | "bootstrapToken", string>>;
+type Fields = Partial<Record<"email" | "name" | "password", string>>;
 
 function fmt(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -30,13 +31,13 @@ function AuthCard() {
   const router = useRouter();
   const params = useSearchParams();
   const next = safeNext(params.get("next"));
+  const invite = params.get("invite") ?? "";
   const [mode, setMode] = useState<Mode>(params.get("mode") === "register" ? "register" : "login");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
-  const [token, setToken] = useState("");
-  const [showToken, setShowToken] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [invitedTo, setInvitedTo] = useState<string | null>(null);
   const [fields, setFields] = useState<Fields>({});
   const [busy, setBusy] = useState(false);
   const [demo, setDemo] = useState(false);
@@ -54,6 +55,19 @@ function AuthCard() {
       })
       .catch(() => {});
   }, [router, next]);
+
+  // an invite link: show where it leads and prefill the invited address
+  useEffect(() => {
+    if (!invite) return;
+    void fetch(`/api/invites/preview?token=${encodeURIComponent(invite)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        setInvitedTo(d.invite.orgName);
+        setEmail((cur) => cur || d.invite.email);
+      })
+      .catch(() => {});
+  }, [invite]);
 
   useEffect(() => {
     if (!lockUntil) return;
@@ -82,22 +96,30 @@ function AuthCard() {
     setError(null);
     setFields({});
     try {
-      const body =
-        mode === "login"
-          ? { email, password }
-          : { email, name, password, ...(showToken && token ? { bootstrapToken: token } : {}) };
-      const res = await fetch(`/api/auth/${mode}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
+      let data: { error?: string; fields?: Fields; retryAfterSeconds?: number } = {};
+      let ok = false;
+      if (mode === "login") {
+        // Auth.js credentials sign-in. A lockout comes back as code "locked:<seconds>".
+        const r = await signIn("credentials", { email, password, redirect: false });
+        ok = !!r && !r.error;
+        const m = /^locked:(\d+)$/.exec(r?.code ?? "");
+        if (m) data = { retryAfterSeconds: Number(m[1]) };
+        else if (!ok) data = { error: "Email or password is incorrect" };
+      } else {
+        const res = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email, name, password, ...(invite ? { inviteToken: invite } : {}) }),
+        });
+        ok = res.ok;
+        data = await res.json().catch(() => ({}));
+      }
+      if (ok) {
         router.replace(next);
         router.refresh();
         return;
       }
-      if (res.status === 429 && typeof data.retryAfterSeconds === "number") {
+      if (typeof data.retryAfterSeconds === "number") {
         const n = Date.now();
         setNow(n);
         setLockUntil(n + data.retryAfterSeconds * 1000);
@@ -143,6 +165,12 @@ function AuthCard() {
           {register ? "New accounts start as a clerk. An admin can change your role." : "Your role sets how much you can approve."}
         </p>
 
+        {invitedTo && (
+          <p className="mt-3 rounded-lg border border-neon-blue/40 bg-neon-blue/10 px-3 py-2 text-sm">
+            {register ? "Create an account" : "Sign in"} to join <strong>{invitedTo}</strong>.
+          </p>
+        )}
+
         <form onSubmit={submit} className="mt-6 space-y-5" aria-busy={busy}>
           {register && (
             <div className="space-y-2">
@@ -183,33 +211,6 @@ function AuthCard() {
             hint={register ? "At least 10 characters. Avoid common words and keyboard runs." : undefined}
             meter={register ? { email, name } : undefined}
           />
-          {register && (
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => setShowToken((s) => !s)}
-                aria-expanded={showToken}
-                className="min-h-11 rounded-md text-sm text-blue-text underline underline-offset-4 hover:text-foreground"
-              >
-                {showToken ? "Hide admin setup code" : "I have an admin setup code"}
-              </button>
-              {showToken && (
-                <div className="space-y-2">
-                  <Label htmlFor="token">Admin setup code</Label>
-                  <Input
-                    id="token"
-                    type="password"
-                    autoComplete="off"
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    aria-invalid={fields.bootstrapToken ? true : undefined}
-                    aria-describedby={fields.bootstrapToken ? "token-err" : undefined}
-                  />
-                  {fields.bootstrapToken && <FieldError id="token-err">{fields.bootstrapToken}</FieldError>}
-                </div>
-              )}
-            </div>
-          )}
 
           <div ref={errRef} tabIndex={-1} className="outline-none">
             {locked ? (

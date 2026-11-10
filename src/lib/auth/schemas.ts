@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { passwordProblem } from "./passwords";
-import { MAX_PASSWORD_LENGTH, ROLES } from "./session";
+import { MAX_PASSWORD_LENGTH, passwordProblem } from "./passwords";
+import { ORG_ROLES } from "./roles";
 
 const email = z.preprocess(
   (v) => (typeof v === "string" ? v.trim().toLowerCase() : v),
@@ -25,8 +25,8 @@ export const registerSchema = z
       .min(1, { message: "Enter your name." })
       .max(80, { message: "Name is too long (80 characters max)." }),
     password: z.string({ message: "Choose a password." }),
-    /** Optional one-time setup secret (BOOTSTRAP_ADMIN_TOKEN) that makes this account the first admin. */
-    bootstrapToken: z.string({ message: "Setup token must be text." }).max(512).optional(),
+    /** Optional invite token: joins the inviting organization instead of creating a personal one. */
+    inviteToken: z.string({ message: "Invite token must be text." }).max(512).optional(),
   })
   .superRefine((v, ctx) => {
     const problem = passwordProblem(v.password, { email: v.email, name: v.name });
@@ -43,7 +43,7 @@ export const changePasswordSchema = z.object({
 
 export const roleChangeSchema = z.object({
   email: z.string({ message: "email is required" }).trim().toLowerCase().min(1, { message: "email is required" }),
-  role: z.enum(ROLES as [string, ...string[]], { message: `role must be one of: ${ROLES.join(", ")}` }),
+  role: z.enum(ORG_ROLES, { message: `role must be one of: ${ORG_ROLES.join(", ")}` }),
 });
 
 /** Field -> first message, for form UIs. */

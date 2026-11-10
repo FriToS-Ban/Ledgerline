@@ -11,10 +11,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FieldError, PasswordField } from "@/components/auth/password-field";
 
-type Role = "clerk" | "approver" | "admin";
+type Role = "owner" | "admin" | "member";
 type Me = { email: string; name: string; role: Role };
 type UserRow = { email: string; name: string; role: Role; createdAt: string | null };
-const ROLES: Role[] = ["clerk", "approver", "admin"];
+const ROLES: Role[] = ["owner", "admin", "member"];
 
 function fmtDate(iso: string | null) {
   if (!iso) return "Unknown";
@@ -48,9 +48,7 @@ function ChangePassword({ me }: { me: Me }) {
         setCurrent("");
         setNext("");
         toast.success(
-          data.revokedSessions > 0
-            ? `Password changed. ${data.revokedSessions} other session${data.revokedSessions === 1 ? "" : "s"} signed out.`
-            : "Password changed.",
+          "Password changed. Your other sessions were signed out.",
         );
       } else if (res.status === 401) {
         router.replace("/login?next=/account");
@@ -108,11 +106,7 @@ function SignOutEverywhere({ onDone }: { onDone: () => void }) {
   async function go() {
     setBusy(true);
     try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ everywhere: true }),
-      });
+      await fetch("/api/auth/signout-everywhere", { method: "POST" });
     } finally {
       setBusy(false);
       onDone();
@@ -209,8 +203,8 @@ function UsersAdmin({ me }: { me: Me }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="font-display text-xl">Users and roles</CardTitle>
-        <CardDescription>Role changes apply on the person&apos;s next request. At least one admin must remain.</CardDescription>
+        <CardTitle className="font-display text-xl">Members and roles</CardTitle>
+        <CardDescription>Role changes apply on the person&apos;s next request. Owners and admins can approve payments. At least one owner must remain.</CardDescription>
       </CardHeader>
       <CardContent>
         {error && (
@@ -318,7 +312,7 @@ export default function AccountPage() {
       <Card>
         <CardHeader>
           <CardTitle className="font-display text-xl">Profile</CardTitle>
-          <CardDescription>Your name and role. An admin can change your role.</CardDescription>
+          <CardDescription>Your name and your role in this organization. An owner or admin can change it.</CardDescription>
         </CardHeader>
         <CardContent>
           <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-[auto_1fr]">
@@ -347,7 +341,7 @@ export default function AccountPage() {
           <SignOutEverywhere onDone={leave} />
         </>
       )}
-      {me.role === "admin" && <UsersAdmin me={me} />}
+      {(me.role === "owner" || me.role === "admin") && <UsersAdmin me={me} />}
     </div>
   );
 }

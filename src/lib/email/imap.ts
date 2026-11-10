@@ -12,7 +12,7 @@ let polling = false;
  * after they are safely stored, so a crash mid-poll just re-reads them
  * (ingestRawEmail dedupes on Message-ID).
  */
-export async function pollMailbox(): Promise<{ fetched: number; ingested: number }> {
+export async function pollMailbox(orgId: string): Promise<{ fetched: number; ingested: number }> {
   if (polling) return { fetched: 0, ingested: 0 };
   polling = true;
   const client = new ImapFlow({
@@ -33,9 +33,9 @@ export async function pollMailbox(): Promise<{ fetched: number; ingested: number
         const msg = await client.fetchOne(String(uid), { source: true }, { uid: true });
         if (!msg || !msg.source) continue;
         fetched++;
-        const result = await ingestRawEmail(msg.source, "imap");
+        const result = await ingestRawEmail(orgId, msg.source, "imap");
         if (result.status === "ingested") ingested++;
-        await client.messageFlagsAdd(String(uid), ["\Seen"], { uid: true });
+        await client.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true });
       }
     } finally {
       lock.release();

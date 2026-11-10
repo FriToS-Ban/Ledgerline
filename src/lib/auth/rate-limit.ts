@@ -1,5 +1,4 @@
-import { rawDbClient } from "@/lib/db/client";
-import { ensureAuthSchema } from "./db";
+import { query } from "@/lib/db/client";
 
 export { clientIp } from "./net";
 
@@ -30,34 +29,33 @@ export type Reservation =
  */
 export async function reserveAttempt(keys: string[]): Promise<Reservation> {
   if (!keys.length) return { ok: true, keys, counts: [] };
-  await ensureAuthSchema();
-  const db = rawDbClient();
   const now = Date.now();
   const counts: number[] = [];
   let lockedMs = 0;
   for (const key of keys) {
-    // In DO UPDATE every column reference is the OLD row value. "fresh" = the previous lock has
-    // ended or the window has passed, so counting restarts at 1.
-    const fresh = `((auth_throttle.locked_until IS NOT NULL AND auth_throttle.locked_until <= :now)
-                    OR (auth_throttle.locked_until IS NULL AND :now - auth_throttle.first_at > :win))`;
+    // In DO UPDATE every unqualified-by-EXCLUDED column reference is the OLD row value. "fresh" = the
+    // previous lock has ended or the window has passed, so counting restarts at 1.
+    // $1 key, $2 now, $3 window, $4 max, $5 lock.
+    const fresh = `((auth_throttle.locked_until IS NOT NULL AND auth_throttle.locked_until <= $2::bigint)
+                    OR (auth_throttle.locked_until IS NULL AND $2::bigint - auth_throttle.first_at > $3::bigint))`;
     const r = (
-      await db.execute({
-        sql: `INSERT INTO auth_throttle (key, failures, first_at, locked_until) VALUES (:key, 1, :now, NULL)
-              ON CONFLICT(key) DO UPDATE SET
-                failures = CASE WHEN auth_throttle.locked_until > :now THEN auth_throttle.failures
-                                WHEN ${fresh} THEN 1
-                                ELSE auth_throttle.failures + 1 END,
-                first_at = CASE WHEN auth_throttle.locked_until > :now THEN auth_throttle.first_at
-                                WHEN ${fresh} THEN :now
-                                ELSE auth_throttle.first_at END,
-                locked_until = CASE WHEN auth_throttle.locked_until > :now THEN auth_throttle.locked_until
-                                    WHEN ${fresh} THEN NULL
-                                    WHEN auth_throttle.failures + 1 > :max THEN :now + :lock
-                                    ELSE auth_throttle.locked_until END
-              RETURNING failures, locked_until`,
-        args: { key, now, win: WINDOW_MS, max: MAX_FAILURES, lock: LOCK_MS },
-      })
-    ).rows[0];
+      await query<{ failures: number; locked_until: string | null }>(
+        `INSERT INTO auth_throttle (key, failures, first_at, locked_until) VALUES ($1, 1, $2::bigint, NULL)
+         ON CONFLICT (key) DO UPDATE SET
+           failures = CASE WHEN auth_throttle.locked_until > $2::bigint THEN auth_throttle.failures
+                           WHEN ${fresh} THEN 1
+                           ELSE auth_throttle.failures + 1 END,
+           first_at = CASE WHEN auth_throttle.locked_until > $2::bigint THEN auth_throttle.first_at
+                           WHEN ${fresh} THEN $2::bigint
+                           ELSE auth_throttle.first_at END,
+           locked_until = CASE WHEN auth_throttle.locked_until > $2::bigint THEN auth_throttle.locked_until
+                               WHEN ${fresh} THEN NULL
+                               WHEN auth_throttle.failures + 1 > $4::int THEN $2::bigint + $5::bigint
+                               ELSE auth_throttle.locked_until END
+         RETURNING failures, locked_until`,
+        [key, now, WINDOW_MS, MAX_FAILURES, LOCK_MS],
+      )
+    )[0];
     const lockedUntil = Number(r?.locked_until ?? 0);
     if (lockedUntil > now) lockedMs = Math.max(lockedMs, lockedUntil - now);
     counts.push(Number(r?.failures ?? 0));
@@ -77,10 +75,10 @@ export async function attemptFailed(res: Reservation): Promise<number> {
   let locked = 0;
   for (let i = 0; i < res.keys.length; i++) {
     if (res.counts[i] < MAX_FAILURES) continue;
-    await rawDbClient().execute({
-      sql: "UPDATE auth_throttle SET locked_until = ? WHERE key = ? AND (locked_until IS NULL OR locked_until <= ?)",
-      args: [now + LOCK_MS, res.keys[i], now],
-    });
+    await query(
+      "UPDATE auth_throttle SET locked_until = $1::bigint WHERE key = $2 AND (locked_until IS NULL OR locked_until <= $3::bigint)",
+      [now + LOCK_MS, res.keys[i], now],
+    );
     locked = LOCK_MS;
   }
   return locked ? Math.ceil(locked / 1000) : 0;
@@ -92,19 +90,15 @@ export async function attemptFailed(res: Reservation): Promise<number> {
  */
 export async function attemptSucceeded(res: Reservation, clear: string[] = []) {
   if (!res.ok) return;
-  const db = rawDbClient();
   const now = Date.now();
   for (const key of res.keys) {
     if (clear.includes(key)) {
-      await db.execute({
-        sql: "DELETE FROM auth_throttle WHERE key = ? AND (locked_until IS NULL OR locked_until <= ?)",
-        args: [key, now],
-      });
+      await query("DELETE FROM auth_throttle WHERE key = $1 AND (locked_until IS NULL OR locked_until <= $2::bigint)", [key, now]);
     } else {
-      await db.execute({
-        sql: "UPDATE auth_throttle SET failures = MAX(failures - 1, 0) WHERE key = ? AND (locked_until IS NULL OR locked_until <= ?)",
-        args: [key, now],
-      });
+      await query(
+        "UPDATE auth_throttle SET failures = GREATEST(failures - 1, 0) WHERE key = $1 AND (locked_until IS NULL OR locked_until <= $2::bigint)",
+        [key, now],
+      );
     }
   }
 }
@@ -117,14 +111,11 @@ export async function recordFailure(keys: string[]): Promise<number> {
 /** Seconds until every key is unlocked; 0 when none is locked. Read-only. */
 export async function lockedFor(keys: string[]): Promise<number> {
   if (!keys.length) return 0;
-  await ensureAuthSchema();
   const now = Date.now();
-  const rows = (
-    await rawDbClient().execute({
-      sql: `SELECT MAX(locked_until) l FROM auth_throttle WHERE key IN (${keys.map(() => "?").join(",")}) AND locked_until > ?`,
-      args: [...keys, now],
-    })
-  ).rows;
+  const rows = await query<{ l: string | null }>(
+    "SELECT MAX(locked_until) l FROM auth_throttle WHERE key = ANY($1::text[]) AND locked_until > $2::bigint",
+    [keys, now],
+  );
   const until = Number(rows[0]?.l ?? 0);
   return until > now ? Math.ceil((until - now) / 1000) : 0;
 }
@@ -132,10 +123,10 @@ export async function lockedFor(keys: string[]): Promise<number> {
 /** Drops rows whose window and lock both ended more than a window ago. */
 export async function pruneThrottle() {
   const now = Date.now();
-  await rawDbClient().execute({
-    sql: "DELETE FROM auth_throttle WHERE first_at < ? AND (locked_until IS NULL OR locked_until < ?)",
-    args: [now - 2 * WINDOW_MS, now],
-  });
+  await query("DELETE FROM auth_throttle WHERE first_at < $1::bigint AND (locked_until IS NULL OR locked_until < $2::bigint)", [
+    now - 2 * WINDOW_MS,
+    now,
+  ]);
 }
 
 export function lockoutMessage(seconds: number) {

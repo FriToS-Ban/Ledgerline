@@ -60,16 +60,8 @@ const framedFileHeaders = [
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "Content-Security-Policy", value: fileCsp },
 ];
-/**
- * public/uploads is never framed (the app links uploads through /api/files). Anything requested
- * there directly is sandboxed (no script, no same-origin) and downloaded, never rendered.
- */
-const uploadHeaders = [
-  { key: "Content-Security-Policy", value: `${csp}; sandbox` },
-  { key: "Content-Disposition", value: "attachment" },
-];
-
 const nextConfig: NextConfig = {
+  output: "standalone",
   cacheComponents: false,
   poweredByHeader: false,
   async headers() {
@@ -79,14 +71,11 @@ const nextConfig: NextConfig = {
       { source: "/cases/:path*", headers: [{ key: "Content-Security-Policy", value: casesCsp }] },
       { source: "/api/files/:path*", headers: framedFileHeaders },
       { source: "/demos/:path*", headers: framedFileHeaders },
-      { source: "/uploads/:path*", headers: uploadHeaders },
     ];
   },
   serverExternalPackages: [
     "@mastra/core",
-    "@mastra/libsql",
     "@mastra/loggers",
-    "@libsql/client",
     "tesseract.js",
     "pdfjs-dist",
     "inngest",
