@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import { resumeCase } from "@/lib/process-case";
 import { approvalLimit } from "@/lib/auth/users";
-import { getActor } from "@/lib/auth/guard";
+import { isOrgAdmin, requireActor } from "@/lib/auth/guard";
 import type { PipelineTrace } from "@/lib/invoice/schema";
 
 export async function POST(req: NextRequest) {
-  const actor = await getActor();
-  if (!actor) return NextResponse.json({ error: "sign in required" }, { status: 401 });
+  const g = await requireActor();
+  if (g.deny) return g.deny;
+  const { actor } = g;
 
   const body = (await req.json()) as {
     invoiceId: string;
@@ -17,26 +18,40 @@ export async function POST(req: NextRequest) {
     override?: string;
     note?: string;
   };
+  if (typeof body.invoiceId !== "string") return NextResponse.json({ error: "invoiceId is required" }, { status: 400 });
 
-  // Approval limits: anyone may stop a payment, but releasing money is capped by role.
+  const [d] = await getDb()
+    .select()
+    .from(t.decisions)
+    .where(and(eq(t.decisions.orgId, actor.orgId), eq(t.decisions.invoiceId, body.invoiceId)));
+  if (!d) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  // Anyone in the org may stop a payment; releasing money needs an owner or admin, capped by their limit.
   const releasing = body.action !== "reject" && body.override !== "reject";
   if (releasing) {
-    const [d] = await getDb().select().from(t.decisions).where(eq(t.decisions.invoiceId, body.invoiceId));
-    if (d) {
-      const trace = JSON.parse(d.trace) as PipelineTrace;
-      const amount = trace.normalized?.comparableAmount ?? trace.extraction.total ?? 0;
-      const limit = await approvalLimit(actor.role);
-      if (amount > limit) {
-        return NextResponse.json(
-          {
-            error: `This invoice is ${amount.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}, above the ${actor.role} approval limit of ${limit.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}. A more senior approver must release it.`,
-            code: "over-limit",
-          },
-          { status: 403 },
-        );
-      }
+    if (!isOrgAdmin(actor.orgRole)) {
+      return NextResponse.json({ error: "requires role: owner or admin to release a payment", code: "not-approver" }, { status: 403 });
+    }
+    const trace = JSON.parse(d.trace) as PipelineTrace;
+    const amount = trace.normalized?.comparableAmount ?? trace.extraction.total ?? 0;
+    const limit = await approvalLimit(actor.orgId, actor.orgRole);
+    if (amount > limit) {
+      return NextResponse.json(
+        {
+          error: `This invoice is ${amount.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}, above the ${actor.orgRole} approval limit of ${limit.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}. A more senior approver must release it.`,
+          code: "over-limit",
+        },
+        { status: 403 },
+      );
     }
   }
-  const result = await resumeCase({ ...body, by: `${actor.name} <${actor.email}> (${actor.role})` });
+  const result = await resumeCase({
+    orgId: actor.orgId,
+    invoiceId: body.invoiceId,
+    action: body.action,
+    override: body.override,
+    note: body.note,
+    by: `${actor.name} <${actor.email}> (${actor.orgRole})`,
+  });
   return NextResponse.json(result);
 }

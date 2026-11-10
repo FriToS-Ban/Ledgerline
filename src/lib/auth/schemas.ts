@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { MAX_PASSWORD_LENGTH, passwordProblem } from "./passwords";
-import { ROLES } from "./roles";
+import { ORG_ROLES } from "./roles";
 
 const email = z.preprocess(
   (v) => (typeof v === "string" ? v.trim().toLowerCase() : v),
@@ -45,7 +45,7 @@ export const changePasswordSchema = z.object({
 
 export const roleChangeSchema = z.object({
   email: z.string({ message: "email is required" }).trim().toLowerCase().min(1, { message: "email is required" }),
-  role: z.enum(ROLES as [string, ...string[]], { message: `role must be one of: ${ROLES.join(", ")}` }),
+  role: z.enum(ORG_ROLES, { message: `role must be one of: ${ORG_ROLES.join(", ")}` }),
 });
 
 /** Field -> first message, for form UIs. */

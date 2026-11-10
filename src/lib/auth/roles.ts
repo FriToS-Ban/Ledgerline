@@ -1,4 +1,6 @@
+/** Legacy per-user role (users.role). Not used for authorization; org roles below are. */
 export type Role = "clerk" | "approver" | "admin";
+export const ORG_ROLES = ["owner", "admin", "member"] as const;
 export const ROLES: Role[] = ["clerk", "approver", "admin"];
 export const isRole = (v: unknown): v is Role => typeof v === "string" && (ROLES as string[]).includes(v);
 

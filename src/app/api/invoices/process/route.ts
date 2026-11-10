@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { seedDatabase } from "@/lib/db/seed";
+import { seedOrgDefaults } from "@/lib/db/seed";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import { createInvoiceRecord } from "@/lib/process-case";
@@ -9,12 +9,13 @@ import { saveUpload } from "@/lib/extract/save-upload";
 import { enqueue } from "@/lib/queue/jobs";
 import { drainQueue } from "@/lib/queue/worker";
 import type { DemoId } from "@/lib/fixtures/cases";
-import { requireSignedIn } from "@/lib/auth/guard";
+import { requireActor } from "@/lib/auth/guard";
 
 export async function POST(req: NextRequest) {
-  const unauth = await requireSignedIn();
-  if (unauth) return unauth;
-  await seedDatabase();
+  const g = await requireActor();
+  if (g.deny) return g.deny;
+  const { orgId } = g.actor;
+  await seedOrgDefaults(orgId);
   const contentType = req.headers.get("content-type") ?? "";
   let demoId: DemoId | undefined;
   let filename: string | undefined;
@@ -36,15 +37,15 @@ export async function POST(req: NextRequest) {
   const runId = randomUUID();
   const invoiceId = randomUUID();
   const pdfPath = pdfBytes ? saveUpload({ invoiceId, filename, bytes: pdfBytes }) : undefined;
-  await createInvoiceRecord({ id: invoiceId, demoId, filename, runId, pdfPath });
+  await createInvoiceRecord({ orgId, id: invoiceId, demoId, filename, runId, pdfPath });
 
   // Durable path: the job row survives a crash and is retried with backoff.
   // We then drain inline so the UI usually gets the result straight away.
-  const jobId = await enqueue("process-invoice", { invoiceId, demoId, filename });
-  await drainQueue();
+  const jobId = await enqueue(orgId, "process-invoice", { invoiceId, demoId, filename });
+  await drainQueue(50, orgId);
 
   const db = getDb();
-  const [decision] = await db.select().from(t.decisions).where(eq(t.decisions.invoiceId, invoiceId));
+  const [decision] = await db.select().from(t.decisions).where(and(eq(t.decisions.orgId, orgId), eq(t.decisions.invoiceId, invoiceId)));
   return NextResponse.json({
     invoiceId,
     runId,

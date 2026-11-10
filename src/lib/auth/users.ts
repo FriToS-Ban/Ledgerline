@@ -1,7 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, asc, eq, gt, inArray, isNull, notLike, sql } from "drizzle-orm";
 import { getDb, databaseUrl, query } from "@/lib/db/client";
-import { defaultOrgId } from "@/lib/db/org";
 import * as t from "@/lib/db/schema";
 import { DEMO_DOMAIN, DEMO_ORGS, DEMO_USERS } from "./demo-users";
 import { hashPassword } from "./hash";
@@ -9,7 +8,7 @@ import { DEFAULT_LIMITS, isRole, type Role } from "./roles";
 
 export type OrgRole = "owner" | "admin" | "member";
 
-/** The legacy app role (clerk / approver / admin) kept on users.role until Task 3 moves to org roles. */
+/** The legacy app role (clerk / approver / admin) on users.role. Informational only: authorization uses memberships.role. */
 export type UserSummary = { email: string; name: string; role: Role };
 
 /** Demo accounts exist (and can sign in) only with DEMO_USERS=1, in every environment. */
@@ -221,56 +220,63 @@ export async function bumpTokenVersion(userId: string): Promise<number> {
   return r.v;
 }
 
-export async function listUsers() {
+/** Members of one organization (nobody outside it), with their org role. */
+export async function listOrgMembers(orgId: string) {
   await ensureUsers();
-  const rows = await getDb().select().from(t.users).orderBy(asc(t.users.createdAt), asc(t.users.email));
+  const rows = await getDb()
+    .select({ email: t.users.email, name: t.users.name, role: t.memberships.role, createdAt: t.memberships.createdAt })
+    .from(t.memberships)
+    .innerJoin(t.users, eq(t.users.id, t.memberships.userId))
+    .where(eq(t.memberships.orgId, orgId))
+    .orderBy(asc(t.memberships.createdAt), asc(t.users.email));
   return rows
     .filter((r) => demoUsersEnabled() || !isDemoEmail(r.email))
-    .map((r) => ({
-      email: r.email,
-      name: r.name ?? "",
-      role: r.role as Role,
-      createdAt: r.createdAt.toISOString(),
-    }));
+    .map((r) => ({ email: r.email, name: r.name ?? "", role: r.role as OrgRole, createdAt: r.createdAt.toISOString() }));
 }
 
 export type RoleChange =
-  | { ok: true; user: UserSummary }
-  | { ok: false; status: 404 | 409; error: string };
+  | { ok: true; user: { email: string; name: string; role: OrgRole } }
+  | { ok: false; status: 403 | 404 | 409; error: string };
 
 /**
- * Changes a user's role. Refuses (409) to demote the last remaining admin; the guard is inside
- * the UPDATE itself so two concurrent demotions can't both succeed.
+ * Changes a member's role in `orgId` (the caller's active org; someone who is not a member there
+ * is a 404, never touched). Admins cannot grant or remove `owner`; the last owner of an org cannot be
+ * demoted (the guard is inside the UPDATE, so two concurrent demotions can't both succeed).
  */
-export async function changeRole(email: string, role: Role): Promise<RoleChange> {
-  await ensureUsers();
+export async function changeMemberRole(orgId: string, actorRole: OrgRole, email: string, role: OrgRole): Promise<RoleChange> {
   const e = normalizeEmail(email);
-  const [existing] = await getDb().select().from(t.users).where(eq(t.users.email, e));
-  if (!existing || (isDemoEmail(e) && !demoUsersEnabled())) return { ok: false, status: 404, error: "No user with that email" };
-  const demoClause = demoUsersEnabled() ? "" : `AND email NOT LIKE '%${DEMO_DOMAIN}'`;
+  const [target] = await getDb()
+    .select({ userId: t.users.id, name: t.users.name, role: t.memberships.role })
+    .from(t.memberships)
+    .innerJoin(t.users, eq(t.users.id, t.memberships.userId))
+    .where(and(eq(t.memberships.orgId, orgId), eq(t.users.email, e)));
+  if (!target || (isDemoEmail(e) && !demoUsersEnabled())) return { ok: false, status: 404, error: "No member with that email" };
+  if (actorRole !== "owner" && (role === "owner" || target.role === "owner")) {
+    return { ok: false, status: 403, error: "Only an owner can grant or change the owner role." };
+  }
   const rows = await query(
-    `UPDATE users SET role = $1::text
-     WHERE email = $2
-       AND (role != 'admin' OR $1::text = 'admin' OR (SELECT COUNT(*) FROM users WHERE role = 'admin' ${demoClause}) > 1)
-     RETURNING id`,
-    [role, e],
+    `UPDATE memberships SET role = $1::membership_role
+     WHERE org_id = $2 AND user_id = $3
+       AND (role <> 'owner' OR $1::text = 'owner' OR (SELECT COUNT(*) FROM memberships WHERE org_id = $2 AND role = 'owner') > 1)
+     RETURNING user_id`,
+    [role, orgId, target.userId],
   );
-  if (rows.length !== 1) return { ok: false, status: 409, error: "Cannot remove the last admin. Make someone else an admin first." };
-  return { ok: true, user: { email: e, name: existing.name ?? "", role } };
+  if (rows.length !== 1) return { ok: false, status: 409, error: "Cannot remove the last owner. Make someone else an owner first." };
+  return { ok: true, user: { email: e, name: target.name ?? "", role } };
 }
 
-export async function approvalLimit(role: Role): Promise<number> {
+/** Dollar ceiling an org role may release without a more senior person: owners unlimited, admins the approver limit, members the (lower) member limit. */
+export async function approvalLimit(orgId: string, orgRole: OrgRole): Promise<number> {
+  if (orgRole === "owner") return Infinity;
   const rows = await getDb()
     .select({ key: t.policyRules.key, value: t.policyRules.value })
     .from(t.policyRules)
-    .where(and(eq(t.policyRules.orgId, await defaultOrgId()), inArray(t.policyRules.key, ["clerkLimit", "approverLimit"])));
+    .where(and(eq(t.policyRules.orgId, orgId), inArray(t.policyRules.key, ["clerkLimit", "approverLimit"])));
   const get = (k: string, d: number) => {
     const row = rows.find((r) => r.key === k);
     return row ? Number(row.value) : d;
   };
-  if (role === "clerk") return get("clerkLimit", DEFAULT_LIMITS.clerk);
-  if (role === "approver") return get("approverLimit", DEFAULT_LIMITS.approver);
-  return Infinity;
+  return orgRole === "admin" ? get("approverLimit", DEFAULT_LIMITS.approver) : get("clerkLimit", DEFAULT_LIMITS.clerk);
 }
 
 /** Gives a user with no membership (legacy rows) a personal organization, so every session has an active org. */

@@ -7,7 +7,7 @@ export async function GET() {
   const a = await getActor();
   return NextResponse.json(
     {
-      user: a && { email: a.email, name: a.name, role: a.role, orgId: a.orgId, orgRole: a.orgRole },
+      user: a && { email: a.email, name: a.name, role: a.orgRole, orgId: a.orgId, orgRole: a.orgRole },
       demoAccounts: demoUsersEnabled(),
     },
     { headers: { "cache-control": "no-store" } },

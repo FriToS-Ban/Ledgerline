@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { drainQueue, workerStatus } from "@/lib/queue/worker";
-import { requireSignedIn } from "@/lib/auth/guard";
+import { requireActor } from "@/lib/auth/guard";
 
 export async function POST() {
-  const unauth = await requireSignedIn();
-  if (unauth) return unauth;
-  const r = await drainQueue();
+  const g = await requireActor();
+  if (g.deny) return g.deny;
+  const r = await drainQueue(50, g.actor.orgId);
   return NextResponse.json({ ...r, worker: workerStatus() });
 }

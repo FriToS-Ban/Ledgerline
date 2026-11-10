@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
-import { seedDatabase } from "@/lib/db/seed";
 import * as t from "@/lib/db/schema";
-import { requireSignedIn } from "@/lib/auth/guard";
+import { requireActor } from "@/lib/auth/guard";
 
 export async function GET() {
-  const unauth = await requireSignedIn();
-  if (unauth) return unauth;
-  await seedDatabase();
+  const g = await requireActor();
+  if (g.deny) return g.deny;
+  const { orgId } = g.actor;
   const db = getDb();
-  const invoices = await db.select().from(t.invoices).where(eq(t.invoices.status, "suspended"));
-  const decisions = await db.select().from(t.decisions).orderBy(desc(t.decisions.createdAt));
+  const invoices = await db
+    .select()
+    .from(t.invoices)
+    .where(and(eq(t.invoices.orgId, orgId), eq(t.invoices.status, "suspended")));
+  const decisions = await db.select().from(t.decisions).where(eq(t.decisions.orgId, orgId)).orderBy(desc(t.decisions.createdAt));
   return NextResponse.json(
     invoices.map((inv) => ({
       invoice: inv,
