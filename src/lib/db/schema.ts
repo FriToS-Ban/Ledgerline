@@ -23,6 +23,8 @@ export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  /** sha256 hex of the org's email-intake token (shown once on creation); null = no per-org token. */
+  intakeSecretHash: text("intake_secret_hash"),
   createdAt: createdAt(),
 });
 

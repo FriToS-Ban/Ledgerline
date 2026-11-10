@@ -162,3 +162,46 @@ describe("last-owner guard under concurrency", () => {
     }
   });
 });
+
+describe("intake token management and body cap", () => {
+  it("only owners create / revoke the intake token; the token is stored hashed", async () => {
+    const { POST, DELETE } = await import("@/app/api/orgs/current/intake-token/route");
+    const org = await makeOrg();
+    const owner = await makeMember(org, "owner");
+    const admin = await makeMember(org, "admin");
+    as(admin);
+    expect((await POST()).status).toBe(403);
+    as(owner);
+    const res = await POST();
+    expect(res.status).toBe(201);
+    const { token } = await res.json();
+    const [o] = await getDb().select().from(t.organizations).where(eq(t.organizations.id, org));
+    expect(o.intakeSecretHash).toBeTruthy();
+    expect(o.intakeSecretHash).not.toContain(token);
+    const { intakeOrgBySlug } = await import("@/lib/auth/orgs");
+    const slug = (await getDb().select().from(t.organizations).where(eq(t.organizations.id, org)))[0].slug;
+    expect((await intakeOrgBySlug(slug, token))?.tokenOk).toBe(true);
+    expect((await POST()).status).toBe(201); // rotation invalidates the old token
+    expect((await intakeOrgBySlug(slug, token))?.tokenOk).toBe(false);
+    as(admin);
+    expect((await DELETE()).status).toBe(403);
+    as(owner);
+    expect((await DELETE()).status).toBe(200);
+    expect((await intakeOrgBySlug(slug, token))?.hasToken).toBe(false);
+  });
+
+  it("refuses oversized bodies by Content-Length and by streamed size", async () => {
+    const { POST, MAX_INTAKE_BYTES } = await import("@/app/api/intake/email/route");
+    const { rotateIntakeToken } = await import("@/lib/auth/orgs");
+    const org = await makeOrg("capco");
+    const token = await rotateIntakeToken(org);
+    const headers = { "x-intake-secret": token, "x-intake-org": "capco", "content-type": "message/rfc822" };
+    const declared = await POST(new NextRequest("http://localhost/api/intake/email", { method: "POST", headers: { ...headers, "content-length": String(MAX_INTAKE_BYTES + 1) }, body: "x" }));
+    expect(declared.status).toBe(413);
+    const streamed = await POST(new NextRequest("http://localhost/api/intake/email", { method: "POST", headers, body: Buffer.alloc(MAX_INTAKE_BYTES + 10, 65) }));
+    expect(streamed.status).toBe(413);
+    // wrong credential is rejected before any body is read
+    const bad = await POST(new NextRequest("http://localhost/api/intake/email", { method: "POST", headers: { ...headers, "x-intake-secret": "nope" }, body: "x" }));
+    expect(bad.status).toBe(401);
+  });
+});

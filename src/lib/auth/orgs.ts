@@ -1,4 +1,5 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import { secretsEqual } from "./secret";
 import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
@@ -227,4 +228,30 @@ export async function acceptInvite(user: { id: string; email: string }, token: s
     return true;
   });
   return ok ? { ok: true, orgId: inv.orgId, orgName: inv.orgName } : fail(404, INVALID_INVITE);
+}
+
+/* ------------------------------------------------------------------ email intake token */
+
+const hashIntakeToken = (token: string) => createHash("sha256").update(token).digest("hex");
+
+/** Creates (or rotates) the org's email-intake token. Only the hash is stored; the token is returned once. */
+export async function rotateIntakeToken(orgId: string): Promise<string> {
+  const token = `lli_${randomBytes(32).toString("base64url")}`;
+  await getDb().update(t.organizations).set({ intakeSecretHash: hashIntakeToken(token) }).where(eq(t.organizations.id, orgId));
+  return token;
+}
+
+export async function revokeIntakeToken(orgId: string) {
+  await getDb().update(t.organizations).set({ intakeSecretHash: null }).where(eq(t.organizations.id, orgId));
+}
+
+/** The org behind an intake slug and whether `given` is its per-org token (constant time). */
+export async function intakeOrgBySlug(slug: string, given: string | null): Promise<{ id: string; hasToken: boolean; tokenOk: boolean } | null> {
+  const [o] = await getDb()
+    .select({ id: t.organizations.id, hash: t.organizations.intakeSecretHash })
+    .from(t.organizations)
+    .where(eq(t.organizations.slug, slug.trim().toLowerCase()));
+  if (!o) return null;
+  const tokenOk = !!o.hash && !!given && secretsEqual(hashIntakeToken(given), o.hash);
+  return { id: o.id, hasToken: !!o.hash, tokenOk };
 }

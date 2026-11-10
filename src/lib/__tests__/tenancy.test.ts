@@ -233,30 +233,42 @@ describe("tenant isolation (zamp-demo vs acme)", () => {
     await jobs.claimNext(orgA);
   });
 
-  it("intake webhook: explicit org via x-intake-org, unknown org 404, no silent default in production", async () => {
+  it("intake webhook: per-org token for the slug; the global secret only reaches the service org", async () => {
     const { POST } = await import("@/app/api/intake/email/route");
-    vi.stubEnv("INTAKE_SECRET", "s3cret-value");
-    const send = (headers: Record<string, string>, msgId: string) =>
-      POST(req("/api/intake/email", { method: "POST", headers: { "content-type": "message/rfc822", "x-intake-secret": "s3cret-value", ...headers }, body: EML(msgId) }));
+    const { rotateIntakeToken } = await import("@/lib/auth/orgs");
+    const tokenB = await rotateIntakeToken(orgB);
+    const G = "s3cret-value-s3cret-value-1234";
+    vi.stubEnv("INTAKE_SECRET", G);
+    const send = (secret: string, headers: Record<string, string>, msgId: string) =>
+      POST(req("/api/intake/email", { method: "POST", headers: { "content-type": "message/rfc822", "x-intake-secret": secret, ...headers }, body: EML(msgId) }));
 
-    expect((await send({ "x-intake-org": "acme" }, "b-1@vendor.test")).status).toBe(202);
+    expect((await send(tokenB, { "x-intake-org": "acme" }, "b-1@vendor.test")).status).toBe(202);
     const inB = await getDb().select().from(t.invoices).where(and(eq(t.invoices.orgId, orgB), eq(t.invoices.source, "email")));
     expect(inB).toHaveLength(1);
     expect(await getDb().select().from(t.emailMessages).where(and(eq(t.emailMessages.orgId, orgA), eq(t.emailMessages.messageId, "<b-1@vendor.test>")))).toHaveLength(0);
 
-    expect((await send({ "x-intake-org": "nope" }, "b-2@vendor.test")).status).toBe(404);
-    expect((await send({}, "a-2@vendor.test")).status).toBe(202);
+    // the global secret cannot write into another tenant; org B's token cannot write into A
+    expect((await send(G, { "x-intake-org": "acme" }, "b-9@vendor.test")).status).toBe(403);
+    expect((await send(tokenB, { "x-intake-org": "zamp-demo" }, "a-9@vendor.test")).status).toBe(401);
+    expect((await send(tokenB, {}, "a-8@vendor.test")).status).toBe(401);
+    expect((await send(G, { "x-intake-org": "nope" }, "b-2@vendor.test")).status).toBe(404);
+    // the global secret still feeds the service org (zamp-demo fallback outside production)
+    expect((await send(G, {}, "a-2@vendor.test")).status).toBe(202);
+    expect((await send(G, { "x-intake-org": "zamp-demo" }, "a-4@vendor.test")).status).toBe(202);
     expect(await getDb().select().from(t.emailMessages).where(and(eq(t.emailMessages.orgId, orgA), eq(t.emailMessages.messageId, "<a-2@vendor.test>")))).toHaveLength(1);
 
     vi.stubEnv("NODE_ENV", "production");
-    expect((await send({}, "a-3@vendor.test")).status).toBe(400);
+    expect((await send(G, {}, "a-3@vendor.test")).status).toBe(400);
     vi.stubEnv("SERVICE_ORG_SLUG", "acme");
-    expect((await send({}, "b-3@vendor.test")).status).toBe(202);
+    expect((await send(G, {}, "b-3@vendor.test")).status).toBe(202);
     vi.unstubAllEnvs();
 
+    // without INTAKE_SECRET, a workspace without a token is disabled (503); one with a token still works
     vi.stubEnv("INTAKE_SECRET", "");
-    expect((await send({ "x-intake-org": "acme" }, "b-4@vendor.test")).status).toBe(503);
-    vi.stubEnv("INTAKE_SECRET", "s3cret-value");
+    expect((await send(tokenB, { "x-intake-org": "zamp-demo" }, "b-4@vendor.test")).status).toBe(503);
+    expect((await send(tokenB, { "x-intake-org": "acme" }, "b-6@vendor.test")).status).toBe(202);
+    expect((await send("x", {}, "b-7@vendor.test")).status).toBe(503);
+    vi.stubEnv("INTAKE_SECRET", G);
     const bad = await POST(req("/api/intake/email", { method: "POST", headers: { "x-intake-secret": "wrong" }, body: EML("b-5@vendor.test") }));
     expect(bad.status).toBe(401);
     vi.unstubAllEnvs();
