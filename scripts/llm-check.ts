@@ -11,19 +11,21 @@ async function main() {
   const { modelLabel, activeProvider } = await import("../src/mastra/model");
   const { getDb } = await import("../src/lib/db/client");
   const t = await import("../src/lib/db/schema");
-  const { eq } = await import("drizzle-orm");
+  const { and, eq } = await import("drizzle-orm");
 
   console.log("provider:", activeProvider(), "| model:", modelLabel());
-  await seedDatabase();
-  const invoiceId = await createInvoiceRecord({ demoId: "tax-shipping", runId: randomUUID() });
+  const { defaultOrgId } = await import("../src/lib/db/org");
+  const orgId = await defaultOrgId();
+  await seedDatabase(orgId);
+  const invoiceId = await createInvoiceRecord({ orgId, demoId: "tax-shipping", runId: randomUUID() });
   const started = Date.now();
-  const { trace } = await processCase({ invoiceId, demoId: "tax-shipping" });
+  const { trace } = await processCase({ orgId, invoiceId, demoId: "tax-shipping" });
   console.log(`processed in ${Date.now() - started}ms`);
   console.log("recommendation:", trace.decision.recommendation);
   console.log("analystModel:", trace.decision.analystModel);
   console.log("headline:", trace.decision.analystHeadline);
   console.log("memo:", (trace.decision.analystNote ?? "").slice(0, 500));
-  const ev = await getDb().select().from(t.auditEvents).where(eq(t.auditEvents.invoiceId, invoiceId));
+  const ev = await getDb().select().from(t.auditEvents).where(and(eq(t.auditEvents.orgId, orgId), eq(t.auditEvents.invoiceId, invoiceId)));
   for (const e of ev.filter((x) => x.step.startsWith("mastra"))) {
     console.log("event", e.step, e.status, e.payload.slice(0, 160));
   }

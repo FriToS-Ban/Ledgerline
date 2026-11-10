@@ -5,9 +5,9 @@ import type { FxRateRow } from "@/lib/invoice/fx";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 
-export async function loadPolicy(): Promise<Policy> {
+export async function loadPolicy(orgId: string): Promise<Policy> {
   const db = getDb();
-  const rows = await db.select().from(t.policyRules);
+  const rows = await db.select().from(t.policyRules).where(eq(t.policyRules.orgId, orgId));
   const policy = { ...DEFAULT_POLICY };
   for (const row of rows) {
     const key = row.key as keyof Policy;
@@ -16,11 +16,11 @@ export async function loadPolicy(): Promise<Policy> {
   return policy;
 }
 
-export async function loadOpenPos(): Promise<OpenPo[]> {
+export async function loadOpenPos(orgId: string): Promise<OpenPo[]> {
   const db = getDb();
-  const pos = await db.select().from(t.purchaseOrders);
-  const vendors = await db.select().from(t.vendors);
-  const matched = await db.select().from(t.matches);
+  const pos = await db.select().from(t.purchaseOrders).where(eq(t.purchaseOrders.orgId, orgId));
+  const vendors = await db.select().from(t.vendors).where(eq(t.vendors.orgId, orgId));
+  const matched = await db.select().from(t.matches).where(eq(t.matches.orgId, orgId));
   const vmap = new Map(vendors.map((v) => [v.id, v]));
   const spent = new Map<string, number>();
   for (const m of matched) {
@@ -42,11 +42,11 @@ export async function loadOpenPos(): Promise<OpenPo[]> {
   }));
 }
 
-export async function loadHistory(): Promise<HistoricalInvoice[]> {
+export async function loadHistory(orgId: string): Promise<HistoricalInvoice[]> {
   const db = getDb();
-  const invoices = await db.select().from(t.invoices);
-  const vendors = await db.select().from(t.vendors);
-  const lines = await db.select().from(t.invoiceLines);
+  const invoices = await db.select().from(t.invoices).where(eq(t.invoices.orgId, orgId));
+  const vendors = await db.select().from(t.vendors).where(eq(t.vendors.orgId, orgId));
+  const lines = await db.select().from(t.invoiceLines).where(eq(t.invoiceLines.orgId, orgId));
   const vmap = new Map(vendors.map((v) => [v.id, v.name]));
   const lineText = new Map<string, string>();
   for (const l of lines) {
@@ -64,9 +64,9 @@ export async function loadHistory(): Promise<HistoricalInvoice[]> {
     }));
 }
 
-export async function loadFx(): Promise<FxRateRow[]> {
+export async function loadFx(orgId: string): Promise<FxRateRow[]> {
   const db = getDb();
-  const rows = await db.select().from(t.fxRates);
+  const rows = await db.select().from(t.fxRates).where(eq(t.fxRates.orgId, orgId));
   return rows.map((r) => ({
     base: r.base,
     quote: r.quote,
@@ -76,9 +76,9 @@ export async function loadFx(): Promise<FxRateRow[]> {
   }));
 }
 
-export async function vendorApproved(name: string): Promise<{ id: string | null; approved: boolean }> {
+export async function vendorApproved(orgId: string, name: string): Promise<{ id: string | null; approved: boolean }> {
   const db = getDb();
-  const rows = await db.select().from(t.vendors);
+  const rows = await db.select().from(t.vendors).where(eq(t.vendors.orgId, orgId));
   const n = name.toLowerCase();
   const hit = rows.find(
     (v) => v.name.toLowerCase() === n || v.legalName.toLowerCase() === n || n.includes(v.name.toLowerCase()),
@@ -86,9 +86,9 @@ export async function vendorApproved(name: string): Promise<{ id: string | null;
   return { id: hit?.id ?? null, approved: hit?.approved ?? false };
 }
 
-export async function loadCorrections(fingerprint: string) {
+export async function loadCorrections(orgId: string, fingerprint: string) {
   const db = getDb();
-  const rows = await db.select().from(t.decisionCorrections);
+  const rows = await db.select().from(t.decisionCorrections).where(eq(t.decisionCorrections.orgId, orgId));
   return rows.filter((r) => r.fingerprint === fingerprint || fingerprint.includes(r.fingerprint)).slice(0, 3);
 }
 

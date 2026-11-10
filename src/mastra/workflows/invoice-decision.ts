@@ -4,6 +4,7 @@ import { processCase, resumeCase } from "@/lib/process-case";
 import { decisionEnum } from "@/lib/invoice/schema";
 
 const inputSchema = z.object({
+  orgId: z.string(),
   invoiceId: z.string(),
   demoId: z.string().optional(),
   filename: z.string().optional(),
@@ -37,6 +38,7 @@ const run = createStep({
   execute: async ({ inputData, resumeData, suspend }) => {
     if (resumeData) {
       const r = await resumeCase({
+        orgId: inputData.orgId,
         invoiceId: inputData.invoiceId,
         action: resumeData.action,
         override: resumeData.override,
@@ -49,6 +51,7 @@ const run = createStep({
       };
     }
     const { trace, needsHuman } = await processCase({
+      orgId: inputData.orgId,
       invoiceId: inputData.invoiceId,
       demoId: inputData.demoId as never,
       filename: inputData.filename,

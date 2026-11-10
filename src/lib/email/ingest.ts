@@ -1,10 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { simpleParser } from "mailparser";
-import { defaultOrgId } from "@/lib/db/org";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
-import { seedDatabase } from "@/lib/db/seed";
+import { seedOrgDefaults } from "@/lib/db/seed";
 import { saveUpload } from "@/lib/extract/save-upload";
 import { sniffKind } from "@/lib/extract/parse-text";
 import { enqueue } from "@/lib/queue/jobs";
@@ -24,18 +23,21 @@ const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
  * enqueue it. Idempotent on Message-ID so IMAP re-polls and webhook retries are safe.
  */
 export async function ingestRawEmail(
+  orgId: string,
   raw: Buffer | Uint8Array,
   source: "webhook" | "imap" | "cli" = "webhook",
 ): Promise<IngestResult> {
-  await seedDatabase();
+  await seedOrgDefaults(orgId);
   const mail = await simpleParser(Buffer.from(raw));
   const sender = mail.from?.value[0]?.address ?? null;
   const subject = mail.subject ?? null;
   const messageId = mail.messageId ?? `generated-${randomUUID()}`;
 
   const db = getDb();
-  const orgId = await defaultOrgId();
-  const [seen] = await db.select().from(t.emailMessages).where(eq(t.emailMessages.messageId, messageId));
+  const [seen] = await db
+    .select()
+    .from(t.emailMessages)
+    .where(and(eq(t.emailMessages.orgId, orgId), eq(t.emailMessages.messageId, messageId)));
   if (seen) {
     return { status: "duplicate", messageId, sender, subject, invoiceIds: JSON.parse(seen.invoiceIds) };
   }
@@ -62,7 +64,7 @@ export async function ingestRawEmail(
       subject,
       createdAt: new Date(),
     });
-    await enqueue("process-invoice", { invoiceId, filename });
+    await enqueue(orgId, "process-invoice", { invoiceId, filename });
     invoiceIds.push(invoiceId);
   }
 

@@ -9,7 +9,7 @@ const g = globalThis as unknown as { __apWorker?: WorkerState };
  * of each invoice's time is spent waiting on a model. claimNext is compare-and-set, so lanes never
  * take the same job. Safe to call concurrently (re-entrancy guarded).
  */
-export async function drainQueue(maxJobs = 50) {
+export async function drainQueue(maxJobs = 50, orgId?: string) {
   const state = (g.__apWorker ??= { timer: null, busy: false, lastTick: null });
   if (state.busy) return { ran: 0, skipped: true };
   state.busy = true;
@@ -19,12 +19,12 @@ export async function drainQueue(maxJobs = 50) {
     await Promise.all(
       Array.from({ length: lanes }, async () => {
         while (ran < maxJobs) {
-          const job = await claimNext();
+          const job = await claimNext(orgId);
           if (!job) break;
           ran++;
           try {
             await runJob(job);
-            await completeJob(job.id);
+            await completeJob(job);
           } catch (err) {
             await failJob(job, err);
           }
@@ -39,21 +39,24 @@ export async function drainQueue(maxJobs = 50) {
 }
 
 async function tick() {
+  // Folder / ERP / mailbox connectors are deployment-wide: they feed one explicitly configured org.
+  const { resolveServiceOrg } = await import("@/lib/db/org");
+  const serviceOrg = await resolveServiceOrg().catch(() => null);
   try {
     const { syncMasterFolder } = await import("@/lib/master/sync");
-    await syncMasterFolder();
+    if (serviceOrg) await syncMasterFolder(serviceOrg);
   } catch (err) {
     console.error("[worker] master sync failed", err);
   }
   try {
     const { syncErpIfDue } = await import("@/lib/master/erp");
-    await syncErpIfDue();
+    if (serviceOrg) await syncErpIfDue(serviceOrg);
   } catch (err) {
     console.error("[worker] ERP sync failed", err);
   }
   try {
     const { pollMailbox, imapConfigured } = await import("@/lib/email/imap");
-    if (imapConfigured()) await pollMailbox();
+    if (serviceOrg && imapConfigured()) await pollMailbox(serviceOrg);
   } catch (err) {
     console.error("[worker] mailbox poll failed", err);
   }

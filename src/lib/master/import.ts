@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
 import { query } from "@/lib/db/client";
-import { defaultOrgId } from "@/lib/db/org";
 import { parseCsv } from "./csv";
 
 export type ImportSummary = {
@@ -40,10 +39,10 @@ function money(v: string | undefined): number | null {
  * source of truth: a vendor/PO present in the file overwrites the stored one.
  */
 export async function importMaster(
+  orgId: string,
   inputs: { name: string; text: string }[],
   source: string,
 ): Promise<ImportSummary> {
-  const orgId = await defaultOrgId();
   const summary: ImportSummary = { vendors: 0, pos: 0, poLines: 0, errors: [] };
 
   const parsed = inputs.map((f) => {

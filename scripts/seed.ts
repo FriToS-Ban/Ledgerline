@@ -1,20 +1,15 @@
 import { eq } from "drizzle-orm";
-import { DEMO_USERS } from "../src/lib/auth/demo-users";
+import { DEMO_ORGS, DEMO_USERS } from "../src/lib/auth/demo-users";
 import { hashPassword } from "../src/lib/auth/hash";
 import { closeDb, getDb } from "../src/lib/db/client";
 import { seedDatabase } from "../src/lib/db/seed";
 import * as t from "../src/lib/db/schema";
 
-const ORGS = [
-  { name: "Zamp Demo", slug: "zamp-demo" },
-  { name: "Acme Holdings", slug: "acme" },
-];
-
 /** Idempotent: safe to run any number of times. */
 export async function seed() {
   const db = getDb();
   const orgIds: Record<string, string> = {};
-  for (const o of ORGS) {
+  for (const o of DEMO_ORGS) {
     await db.insert(t.organizations).values(o).onConflictDoNothing({ target: t.organizations.slug });
     const [row] = await db.select({ id: t.organizations.id }).from(t.organizations).where(eq(t.organizations.slug, o.slug));
     orgIds[o.slug] = row.id;
@@ -40,7 +35,7 @@ export async function seed() {
       users++;
     }
   }
-  return { orgs: ORGS.length, demoUsers: users };
+  return { orgs: DEMO_ORGS.length, demoUsers: users };
 }
 
 if (process.argv[1]?.replace(/\\/g, "/").endsWith("scripts/seed.ts")) {

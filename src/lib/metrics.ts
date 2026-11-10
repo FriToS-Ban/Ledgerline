@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import type { PipelineTrace } from "@/lib/invoice/schema";
@@ -23,12 +24,12 @@ const RULE_LABEL: Record<string, string> = {
   "doc.marketplace": "Marketplace invoice",
 };
 
-export async function computeMetrics() {
+export async function computeMetrics(orgId: string) {
   const db = getDb();
   const [invoices, decisions, q] = await Promise.all([
-    db.select().from(t.invoices),
-    db.select().from(t.decisions),
-    queueStats(),
+    db.select().from(t.invoices).where(eq(t.invoices.orgId, orgId)),
+    db.select().from(t.decisions).where(eq(t.decisions.orgId, orgId)),
+    queueStats(orgId),
   ]);
   const dmap = new Map(decisions.map((d) => [d.invoiceId, d]));
   const real = invoices.filter((i) => !(i.demoId ?? "").startsWith("seed-"));

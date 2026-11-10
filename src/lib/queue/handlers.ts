@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import { processCase, resumeCase } from "@/lib/process-case";
@@ -14,11 +14,15 @@ function loadBytes(pdfPath: string | null): Uint8Array | undefined {
   return fs.existsSync(file) ? new Uint8Array(fs.readFileSync(file)) : undefined;
 }
 
-export async function processInvoiceJob(data: { invoiceId: string; demoId?: string | null; filename?: string }) {
-  const [inv] = await getDb().select().from(t.invoices).where(eq(t.invoices.id, data.invoiceId));
+export async function processInvoiceJob(data: { orgId: string; invoiceId: string; demoId?: string | null; filename?: string }) {
+  const [inv] = await getDb()
+    .select()
+    .from(t.invoices)
+    .where(and(eq(t.invoices.orgId, data.orgId), eq(t.invoices.id, data.invoiceId)));
   if (!inv) throw new Error(`invoice ${data.invoiceId} not found`);
   // processCase is idempotent: it returns the stored decision if one exists.
   await processCase({
+    orgId: data.orgId,
     invoiceId: data.invoiceId,
     demoId: (data.demoId ?? undefined) as DemoId | undefined,
     filename: data.filename,
@@ -27,7 +31,8 @@ export async function processInvoiceJob(data: { invoiceId: string; demoId?: stri
 }
 
 export async function runJob(job: JobRow) {
-  const data = JSON.parse(job.payload);
+  // The job row is the authority on tenancy: whatever the payload says, the job runs as its own org.
+  const data = { ...JSON.parse(job.payload), orgId: job.orgId };
   if (job.kind === "process-invoice") return processInvoiceJob(data);
   if (job.kind === "resume-invoice") {
     await resumeCase(data);

@@ -1,6 +1,5 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDb } from "./client";
-import { defaultOrgId } from "./org";
 import * as t from "./schema";
 import { generateDemoPdfs } from "@/lib/pdf/generate";
 
@@ -58,9 +57,25 @@ const MASTER = {
   ],
 };
 
-/** Loads the demo vendor / PO book, history and policy into one org (default: zamp-demo). Idempotent. */
-export async function seedDatabase(orgIdArg?: string, opts: { pdfs?: boolean } = {}) {
-  const orgId = orgIdArg ?? (await defaultOrgId());
+const LIMIT_RULES = [
+  { id: "p11", key: "clerkLimit", value: "5000", label: "Member approval limit ($)" },
+  { id: "p12", key: "approverLimit", value: "100000", label: "Admin approval limit ($)" },
+];
+
+/** Gives an org its guard policy and FX table if it has none yet (new tenants); never touches existing rows. Idempotent. */
+export async function seedOrgDefaults(orgId: string) {
+  const db = getDb();
+  const have = new Set(
+    (await db.select({ key: t.policyRules.key }).from(t.policyRules).where(eq(t.policyRules.orgId, orgId))).map((r) => r.key),
+  );
+  const missing = [...MASTER.policy, ...LIMIT_RULES].filter((r) => !have.has(r.key)).map((r) => ({ ...r, orgId, enabled: true }));
+  if (missing.length) await db.insert(t.policyRules).values(missing).onConflictDoNothing();
+  const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(t.fxRates).where(eq(t.fxRates.orgId, orgId));
+  if (n === 0) await db.insert(t.fxRates).values(MASTER.fx.map((r) => ({ ...r, orgId }))).onConflictDoNothing();
+}
+
+/** Loads the demo vendor / PO book, history and policy into one org. Idempotent. */
+export async function seedDatabase(orgId: string, opts: { pdfs?: boolean } = {}) {
   const db = getDb();
   const [{ n }] = await db
     .select({ n: sql<number>`count(*)::int` })
@@ -76,25 +91,8 @@ export async function seedDatabase(orgIdArg?: string, opts: { pdfs?: boolean } =
     await db.insert(t.invoices).values(withOrg(MASTER.historyInvoices)).onConflictDoNothing();
     await db.insert(t.matches).values(withOrg(MASTER.historyMatches)).onConflictDoNothing();
     await db.insert(t.invoiceLines).values(withOrg(MASTER.historyLines)).onConflictDoNothing();
-    await db.insert(t.fxRates).values(withOrg(MASTER.fx)).onConflictDoNothing();
-    await db.insert(t.policyRules).values(withOrg(MASTER.policy)).onConflictDoNothing();
   }
-
-  for (const r of [
-    { id: "p11", key: "clerkLimit", value: "5000", label: "Clerk approval limit ($)" },
-    { id: "p12", key: "approverLimit", value: "100000", label: "Approver approval limit ($)" },
-  ]) {
-    const have = await db
-      .select({ id: t.policyRules.id })
-      .from(t.policyRules)
-      .where(and(eq(t.policyRules.orgId, orgId), eq(t.policyRules.key, r.key)));
-    if (!have.length) await db.insert(t.policyRules).values({ ...r, orgId, enabled: true }).onConflictDoNothing();
-  }
-
-  await db
-    .insert(t.fxRates)
-    .values({ orgId, id: "fx4", base: "INR", quote: "USD", rate: 0.012, asOf: "2026-10-01", source: "seed" })
-    .onConflictDoNothing();
+  await seedOrgDefaults(orgId);
 
   if (opts.pdfs !== false) await generateDemoPdfs();
   return { seeded: empty };
