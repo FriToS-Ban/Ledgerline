@@ -20,6 +20,8 @@ import { authEnabled } from "@/lib/auth/roles";
 const OPEN = [
   /^\/login(\/|$)/,
   /^\/register(\/|$)/,
+  /^\/invite\/[^/]+\/?$/,
+  /^\/api\/invites\/preview\/?$/,
   /^\/api\/auth\/(register|me|session|csrf|providers|signin|signout|callback|error)(\/|$)/,
 ];
 

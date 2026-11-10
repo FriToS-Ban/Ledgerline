@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readJson, roleChangeSchema, validationError } from "@/lib/auth/schemas";
 import { requireOrgRole } from "@/lib/auth/guard";
+import { removeMember } from "@/lib/auth/orgs";
 import { changeMemberRole, listOrgMembers } from "@/lib/auth/users";
 
 /** Owner / admin only: the members of the caller's organization with their org role. */
@@ -19,4 +20,14 @@ export async function PATCH(req: NextRequest) {
   const r = await changeMemberRole(g.actor.orgId, g.actor.orgRole, parsed.data.email, parsed.data.role);
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
   return NextResponse.json({ user: r.user });
+}
+
+/** Owner / admin: `{ email }` removes that member from the caller's organization (admins cannot remove owners; the last owner stays). */
+export async function DELETE(req: NextRequest) {
+  const g = await requireOrgRole();
+  if (g.deny) return g.deny;
+  const body = (await readJson(req)) as { email?: unknown };
+  const r = await removeMember(g.actor.orgId, g.actor.orgRole, typeof body.email === "string" ? body.email : "");
+  if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
+  return NextResponse.json({ ok: true });
 }
