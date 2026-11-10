@@ -19,7 +19,7 @@ const csp = [
   "child-src 'self' blob:",
   "frame-src 'self' blob:",
   "media-src 'self' blob:",
-  "object-src 'none'",
+  "object-src 'self'", // the browser PDF viewer embeds as an object inside the case-page iframe
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",

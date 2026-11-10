@@ -15,9 +15,9 @@ type Tuning = { hold: number; gap: number; scale: number; inset: number; first: 
 
 const TUNING: Record<FlyersVariant, Tuning> = {
   // in the app the pair says hello, hangs around in the gutters, then gets out of the way
-  app: { hold: 6.5, gap: 9, scale: 1, inset: 1.05, first: null },
+  app: { hold: 6.5, gap: 9, scale: 0.85, inset: 0.45, first: null },
   // on the login screen they stand guard either side of the form for longer
-  login: { hold: 11, gap: 2.5, scale: 1.12, inset: 1.6, first: ["shield", "stamp"] },
+  login: { hold: 11, gap: 2.5, scale: 0.9, inset: 0.6, first: ["shield", "stamp"] },
 };
 
 type Wave = { id: number; kinds: [BuddyKind, BuddyKind]; seed: number; leaving: boolean };
