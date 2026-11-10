@@ -10,7 +10,6 @@ import {
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 
 const Toaster = ({ ...props }: ToasterProps) => {
-
   return (
     <Sonner
       theme="dark"
@@ -29,9 +28,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-border": "var(--border)",
           "--border-radius": "var(--radius)",
           "--success-bg": "var(--popover)",
-          "--success-text": "var(--success-text)",
+          "--success-text": "var(--ok-text)",
           "--error-bg": "var(--popover)",
-          "--error-text": "var(--danger-text)",
+          "--error-text": "var(--bad-text)",
         } as React.CSSProperties
       }
       {...props}

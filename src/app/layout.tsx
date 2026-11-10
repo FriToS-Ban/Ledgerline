@@ -4,9 +4,9 @@ import { Shell } from "@/components/shell";
 import "./globals.css";
 
 // Audiowide: display headings. Inter: readable working interface. JetBrains Mono: numbers and code.
-const display = Audiowide({ variable: "--font-display", subsets: ["latin"], weight: "400", display: "swap" });
+const display = Audiowide({ variable: "--font-audiowide", subsets: ["latin"], weight: "400", display: "swap" });
 const body = Inter({ variable: "--font-body", subsets: ["latin"], display: "swap" });
-const mono = JetBrains_Mono({ variable: "--font-mono", subsets: ["latin"], display: "swap" });
+const mono = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
   title: "Ledgerline — Invoice decisions",
