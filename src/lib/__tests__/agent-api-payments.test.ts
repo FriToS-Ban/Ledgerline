@@ -370,10 +370,10 @@ describe("webhooks: SSRF-safe, signed, retried", () => {
 });
 
 describe("cron endpoint", () => {
-  it("is closed until CRON_SECRET is set, and checks it in constant time", async () => {
+  it("refuses callers without a valid CRON_SECRET or GitHub token, and runs a tick with the secret", async () => {
     const { GET } = await import("@/app/api/cron/tick/route");
     delete process.env.CRON_SECRET;
-    expect((await GET(req("/api/cron/tick"))).status).toBe(503);
+    expect((await GET(req("/api/cron/tick"))).status).toBe(401);
     process.env.CRON_SECRET = "a-very-long-cron-secret-123456";
     expect((await GET(req("/api/cron/tick", "GET", undefined, { authorization: "Bearer wrong" }))).status).toBe(401);
     const ok = await GET(req("/api/cron/tick", "GET", undefined, { authorization: "Bearer a-very-long-cron-secret-123456" }));

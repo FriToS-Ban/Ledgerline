@@ -1,4 +1,4 @@
-import { secretsEqual } from "@/lib/auth/secret";
+import { authorizeCron } from "@/lib/cron-auth";
 import { tick, workerStatus } from "@/lib/queue/worker";
 
 export const dynamic = "force-dynamic";
@@ -7,19 +7,15 @@ export const maxDuration = 60;
 /**
  * Scheduled worker pass for serverless hosts, where no background loop survives between requests:
  * retries failed webhook deliveries and queued invoices, polls the mailbox, syncs the ERP.
- * Call it every few minutes with `Authorization: Bearer $CRON_SECRET` (a free GitHub Actions
- * schedule does this: .github/workflows/cron.yml; Vercel Cron sends the same header).
+ * .github/workflows/cron.yml calls it every 10 minutes with a GitHub OIDC token (no secret to
+ * manage); any other scheduler can send `Authorization: Bearer $CRON_SECRET`. See lib/cron-auth.ts.
  */
 async function run(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || secret.length < 24) {
-    return Response.json({ error: "CRON_SECRET (>= 24 chars) is not configured" }, { status: 503 });
-  }
-  const given = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  if (!secretsEqual(given, secret)) return Response.json({ error: "unauthorized" }, { status: 401 });
+  const auth = await authorizeCron(req);
+  if (!auth.ok) return Response.json({ error: "unauthorized", reason: auth.reason }, { status: 401 });
   const started = Date.now();
   await tick();
-  return Response.json({ ok: true, ms: Date.now() - started, worker: workerStatus() }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ ok: true, via: auth.via, ms: Date.now() - started, worker: workerStatus() }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export const GET = run;
