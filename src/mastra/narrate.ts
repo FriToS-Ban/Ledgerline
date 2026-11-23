@@ -61,7 +61,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 
 export async function narrateDecision(trace: PipelineTrace): Promise<AnalystMemo | null> {
   if (!hasLlmKey()) return null;
-  const model = modelLabel() ?? "unknown";
+  let model = modelLabel() ?? "unknown";
   const agent = decideAgent();
   const locked = VERB[trace.decision.recommendation] ?? trace.decision.recommendation;
   const issues = trace.rules.filter((r) => r.outcome !== "pass").map((r) => r.humanText);
@@ -89,6 +89,9 @@ Return structured output. Headline ≤ 8 words. soWhat is the one sentence they 
   );
   const object = (result as { object?: z.infer<typeof memoSchema> }).object;
   const text = String((result as { text?: string }).text ?? "").trim();
+  // With a fallback chain the first model may not be the one that answered: record the real author.
+  const answered = (result as { response?: { modelId?: unknown } }).response?.modelId;
+  if (typeof answered === "string" && answered) model = answered;
   if (object?.memo) {
     return {
       headline: object.headline,

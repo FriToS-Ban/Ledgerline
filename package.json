@@ -7,6 +7,7 @@
     "dev:inngest": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
     "test": "vitest run",
     "build": "next build",
+    "vercel-build": "tsx scripts/migrate-build.ts && next build",
     "start": "next start",
     "lint": "eslint",
     "build:migrate": "esbuild scripts/migrate-deploy.ts --bundle --platform=node --target=node22 --format=cjs --external:pg-native --outfile=dist/migrate.cjs",

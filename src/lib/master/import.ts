@@ -63,10 +63,21 @@ export async function importMaster(
         continue;
       }
       const id = r.id || `v-${slug(name)}`;
+      // Optional verified remittance / tax identity. Empty cells leave what is on file untouched,
+      // so a vendor sheet without bank columns never wipes verified bank details.
+      const bankAccount = (r.bank_account || r.iban || r.account_number || "").replace(/[\s-]/g, "").toUpperCase() || null;
+      const bankCode = (r.bank_code || r.ifsc || r.swift || r.routing_number || "").replace(/\s/g, "").toUpperCase() || null;
+      const taxId = (r.tax_id || r.gstin || r.vat || "").replace(/\s/g, "").toUpperCase() || null;
       await query(
-        `INSERT INTO vendors (org_id,id,name,legal_name,approved,currency,payment_terms) VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `INSERT INTO vendors (org_id,id,name,legal_name,approved,currency,payment_terms,tax_id,bank_account,bank_code,bank_verified_at,bank_verified_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, CASE WHEN $9::text IS NULL THEN NULL ELSE now() END, CASE WHEN $9::text IS NULL THEN NULL ELSE $11 END)
          ON CONFLICT (org_id,id) DO UPDATE SET name=excluded.name, legal_name=excluded.legal_name,
-           approved=excluded.approved, currency=excluded.currency, payment_terms=excluded.payment_terms`,
+           approved=excluded.approved, currency=excluded.currency, payment_terms=excluded.payment_terms,
+           tax_id=COALESCE(excluded.tax_id, vendors.tax_id),
+           bank_account=COALESCE(excluded.bank_account, vendors.bank_account),
+           bank_code=CASE WHEN excluded.bank_account IS NULL THEN COALESCE(excluded.bank_code, vendors.bank_code) ELSE excluded.bank_code END,
+           bank_verified_at=CASE WHEN excluded.bank_account IS NULL THEN vendors.bank_verified_at ELSE now() END,
+           bank_verified_by=CASE WHEN excluded.bank_account IS NULL THEN vendors.bank_verified_by ELSE excluded.bank_verified_by END`,
         [
           orgId,
           id,
@@ -75,6 +86,10 @@ export async function importMaster(
           bool(r.approved, true),
           (r.currency || "USD").toUpperCase(),
           r.payment_terms || "Net 30",
+          taxId,
+          bankAccount,
+          bankCode,
+          `import: ${source}`,
         ],
       );
       summary.vendors++;

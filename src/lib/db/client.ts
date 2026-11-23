@@ -9,7 +9,26 @@ type Cache = { pool?: Pool; url?: string; db?: NodePgDatabase<typeof schema> };
 const g = globalThis as typeof globalThis & { __ledgerlineDb?: Cache };
 const cache = (g.__ledgerlineDb ??= {});
 
-export const databaseUrl = () => process.env.DATABASE_URL || DEFAULT_DATABASE_URL;
+/**
+ * node-postgres already treats sslmode=prefer/require/verify-ca as verify-full, and logs a long
+ * SECURITY WARNING on every cold start when it sees them (hosted Postgres URLs use sslmode=require).
+ * Spelling out verify-full keeps the exact same behaviour without the log noise.
+ */
+export function normalizeDatabaseUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const mode = u.searchParams.get("sslmode");
+    if (mode && ["prefer", "require", "verify-ca"].includes(mode) && !u.searchParams.has("uselibpqcompat")) {
+      u.searchParams.set("sslmode", "verify-full");
+      return u.toString();
+    }
+  } catch {
+    /* not a URL pg can parse either; leave it for pg to report */
+  }
+  return url;
+}
+
+export const databaseUrl = () => normalizeDatabaseUrl(process.env.DATABASE_URL || DEFAULT_DATABASE_URL);
 
 /** The shared node-postgres pool (re-created if DATABASE_URL changed, e.g. between test files). */
 export function getPool(): Pool {

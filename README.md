@@ -1,6 +1,22 @@
 # Ledgerline — the payment guard
 
-Catch duplicate, overpaid and suspicious invoices before money leaves. Every invoice (vendor PDF, photo or email attachment) is read, normalized (tax, shipping, FX), matched against the remaining PO balance (including multi-PO), checked against your guard rules, and given a release / hold / block call with a full audit trail.
+Catch duplicate, overpaid and suspicious invoices before money leaves. Every invoice (vendor PDF, photo, email attachment, or fields sent by another AI agent over the API) is read, normalized (tax, shipping, FX), matched against the remaining PO balance (including multi-PO), checked against your guard rules, and given a release / hold / block call with a full audit trail. Cleared invoices go into payment batches that pay only verified vendor accounts.
+
+**What the guard checks**
+
+| Check | Catches |
+| --- | --- |
+| Bank-detail change (`bank.changed`) | An invoice asking to pay an account other than the vendor's verified one: the most common invoice fraud (business email compromise). Account numbers are only ever shown masked. |
+| 3-way match (`receipt.missing`) | Billing for goods or services that are not marked received on the PO. |
+| Exact / near duplicates | Same number, or same vendor + amount within 1.5% + similar lines within 14 days. |
+| PO balance and tolerance | Overbilling against the remaining PO balance, partial/progressive billing, multi-PO splits, implied POs. |
+| GSTIN (`tax.gstin_invalid`, `tax.id_mismatch`, `tax.gst_type`) | Invalid GSTIN checksum, a GSTIN that differs from the vendor master, IGST charged on an intra-state supply (or the reverse). |
+| Dates (`date.future`, `date.stale`) | Future-dated invoices; invoices older than the policy limit resurfacing. |
+| FX, arithmetic, thresholds, vendor approval, confidence | Missing/stale FX rates, lines that do not add up, amounts over the approval threshold, unapproved vendors, unreadable critical fields. |
+
+**After the decision:** due dates come from vendor payment terms (`Net 30`, `2/10 Net 30`, `EOM`, …). The Payments page batches approved invoices per currency, takes open early-payment discounts, and exports a bank upload CSV that pays the **vendor-master account, never the one printed on an invoice**. Batches are claimed atomically (no double payment) and the exported file is stored, so a re-download is byte-identical. Changing a vendor's bank details is owner-only, requires a note on how it was verified, and is audited.
+
+**Agent API** (`/api/v1`, spec at `/api/v1/openapi.json`, docs and key management on the **API** page): another AI agent (for example an AP agent at Zamp) submits an invoice as a file or as already-extracted JSON fields and gets release / hold / block with reasons, checklist, due date and a link for the human reviewer. Keys are per workspace, hashed at rest, rate limited (120/min), and can never release a payment. Signed webhooks (`Ledgerline-Signature: t=…,v1=HMAC-SHA256`) report `invoice.decided`, `invoice.resolved` and `payment_batch.*`, retried with backoff; webhook targets must be public https hosts (SSRF guard), secrets are encrypted at rest.
 
 ## Run
 
@@ -17,7 +33,7 @@ Optional durable runner (set `INNGEST_DEV=1` in `.env.local`; without it the dev
 npm run dev:inngest
 ```
 
-Optional live vision: set `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Without a key, seeded fixtures and digital PDF parse still run; scanned pages are rendered and OCR'd with Tesseract (the English model is downloaded once from the jsDelivr CDN and cached in the OS temp dir, so the server needs outbound internet the first time).
+Optional live vision: set `GOOGLE_GENERATIVE_AI_API_KEY` (free tier works), `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Each AI call uses a fallback chain: the configured `GOOGLE_MODEL` first, then current Gemini models, then any other provider with a key, so a retired model id (Google retired `gemini-2.5-flash` for new users in Nov 2026) degrades to the next model instead of failing. Without a key, seeded fixtures and digital PDF parse still run; scanned pages are rendered and OCR'd with Tesseract (the English model is downloaded once from the jsDelivr CDN and cached in the OS temp dir, so the server needs outbound internet the first time).
 
 PDF reading runs pdf.js on the server. Its worker, resource folders, the `@napi-rs/canvas` renderer and Tesseract's WASM core are loaded by computed paths that Next's file tracer cannot see, so `next.config.ts` lists them in `outputFileTracingIncludes`; without that, standalone/Docker builds read every PDF as empty. If you add another runtime-loaded package, add it there too and check `.next/standalone/node_modules` after `npm run build`.
 
@@ -73,9 +89,19 @@ Backups: all state lives in Postgres (`pg_dump` the volume or use your provider'
 5. EUR invoice vs USD PO (FX)
 6. Multi-PO bundling with mixed outcomes
 7. Low-confidence scan → human review
+8. Changed bank account (Meridian asks to be paid into a new account) → held, call-back checklist
+9. Billed before delivery (PO-6120 not received) → held by the 3-way match
+
+Running a demo case seeds the demo vendor/PO book into an empty workspace, or tops up an older demo workspace with vendors and POs added since (never touching a workspace with its own vendors).
+
+## Deploying for free
+
+- **Vercel** builds with `npm run vercel-build`, which applies pending migrations (`scripts/migrate-build.ts`) before `next build`, so new tables reach the database on every deploy. Migrations are additive so the previous deployment keeps working until the new one is live. Note: Vercel's free Hobby plan is for non-commercial use; for paying customers use Vercel Pro, or self-host the Docker image (`docker compose up -d`) on any always-free VM (e.g. Oracle Cloud Always Free) with Neon or Supabase free Postgres and Cloudflare R2 (10 GB free) for files.
+- **Scheduled worker:** set `CRON_SECRET` (>= 24 chars) on the deployment and as a GitHub repository secret; `.github/workflows/cron.yml` then calls `/api/cron/tick` every 10 minutes for free (webhook retries, mailbox polling, ERP sync).
+- **CI:** `.github/workflows/ci.yml` runs lint, typecheck, the full test suite against Postgres and a production build on every push and pull request.
 
 ## Operations: email intake, vendor/PO book, durable queue
 
 - **Email intake** — `POST /api/intake/email` (raw `message/rfc822`, or multipart field `email`; send the credential as header `x-intake-secret`: either the workspace's own intake token (an owner creates/rotates it with `POST /api/orgs/current/intake-token`, shown once, `DELETE` revokes) together with the workspace slug in `x-intake-org`, or the deployment-wide `INTAKE_SECRET` (>= 24 chars), which only reaches the service organization (`SERVICE_ORG_SLUG`; only non-production/demo deployments fall back to `zamp-demo`). Disabled (503) when neither exists; bodies over 15 MB get 413) or set `IMAP_HOST/IMAP_USER/IMAP_PASSWORD` and the worker polls the mailbox. Every PDF/image attachment becomes a case. Deduped on Message-ID.
-- **Vendor/PO book** — upload `vendors.csv`, `pos.csv`, `po_lines.csv` on the Operations page, or drop them in `data/master/` (the worker re-imports when they change). Bad rows are skipped and reported, never half-applied.
+- **Vendor/PO book** — upload `vendors.csv` (optional verified columns: `tax_id`/`gstin`, `bank_account`/`iban`, `bank_code`/`ifsc`/`swift`/`routing_number`; empty cells never erase what is on file), `pos.csv`, `po_lines.csv` on the Operations page, or drop them in `data/master/` (the worker re-imports when they change). Bad rows are skipped and reported, never half-applied.
 - **Durable queue** — jobs live in PostgreSQL with leases, exponential backoff retries (5s → 20s → 80s…), dead-letter after 4 attempts, and stale-lease recovery after a crash. The worker starts via `src/instrumentation.ts` and drains on startup. Inspect/retry at `/operations` or `GET/POST /api/queue`.

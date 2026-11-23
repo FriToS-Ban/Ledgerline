@@ -15,9 +15,12 @@ const NAV = [
   { href: "/", label: "Command" },
   { href: "/queue", label: "Invoices" },
   { href: "/review", label: "Needs a person" },
+  { href: "/payments", label: "Payments" },
+  { href: "/vendors", label: "Vendors" },
   { href: "/accuracy", label: "Accuracy" },
   { href: "/operations", label: "Sources" },
   { href: "/policy", label: "Guard rules" },
+  { href: "/developers", label: "API" },
   { href: "/account", label: "Account" },
 ];
 

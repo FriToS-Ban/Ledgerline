@@ -8,7 +8,9 @@ import {
   type OpenPo,
 } from "./match";
 import { normalizeInvoice } from "./normalize";
-import { evaluateRules, recommend } from "./rules";
+import { evaluateRules, recommend, type VendorProfile } from "./rules";
+import { dueFromTerms } from "./terms";
+import { accountKey, maskAccount } from "./bank";
 import {
   DEFAULT_POLICY,
   type Extraction,
@@ -23,6 +25,10 @@ export type PipelineContext = {
   fxRates: FxRateRow[];
   policy: Policy;
   vendorApproved: boolean;
+  /** Vendor master record for the seller, when one matched. */
+  vendor?: VendorProfile | null;
+  /** Clock for date rules (tests pin it). */
+  now?: Date;
 };
 
 export function runPipeline(extraction: Extraction, ctx: PipelineContext): PipelineTrace {
@@ -95,6 +101,12 @@ export function runPipeline(extraction: Extraction, ctx: PipelineContext): Pipel
     return po?.status === "closed" || po?.status === "consumed";
   });
 
+  // 3-way match: a matched PO whose goods/services are not received yet cannot be paid.
+  const unreceivedPos = allocations
+    .map((a) => ctx.pos.find((p) => p.id === a.poId))
+    .filter((po): po is NonNullable<typeof po> => !!po && po.goodsReceived === false)
+    .map((po) => po.number);
+
   const rules = evaluateRules({
     extraction,
     normalized,
@@ -103,8 +115,22 @@ export function runPipeline(extraction: Extraction, ctx: PipelineContext): Pipel
     policy,
     vendorApproved: ctx.vendorApproved,
     poClosed,
+    unreceivedPos,
+    vendor: ctx.vendor ?? null,
+    now: ctx.now,
   });
   const decision = recommend(rules, match);
 
-  return { extraction, normalized, match, duplicates, rules, decision };
+  const terms = ctx.vendor?.paymentTerms ?? extraction.paymentTerms ?? null;
+  const due = dueFromTerms(extraction.invoiceDate, terms);
+  const payToAccount = accountKey(extraction.bankDetails) ?? ctx.vendor?.bankAccount ?? null;
+  const payment = {
+    dueDate: due?.dueDate ?? null,
+    terms: terms ?? (due ? "Net 30 (assumed)" : null),
+    termsAssumed: due?.assumed ?? !terms,
+    discount: due?.discount ?? null,
+    payTo: payToAccount ? maskAccount(payToAccount) : null,
+  };
+
+  return { extraction, normalized, match, duplicates, rules, decision, payment };
 }

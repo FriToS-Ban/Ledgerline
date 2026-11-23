@@ -8,7 +8,7 @@ const MASTER = {
     { id: "v-apex", name: "Apex Industrial Supply", legalName: "Apex Industrial Supply Inc.", approved: true, currency: "USD", paymentTerms: "Net 30" },
     { id: "v-north", name: "Northwind Logistics", legalName: "Northwind Logistics Ltd.", approved: true, currency: "USD", paymentTerms: "Net 45" },
     { id: "v-helios", name: "Helios Components GmbH", legalName: "Helios Components GmbH", approved: true, currency: "EUR", paymentTerms: "Net 30" },
-    { id: "v-meridian", name: "Meridian Facilities", legalName: "Meridian Facilities LLC", approved: true, currency: "USD", paymentTerms: "Net 30" },
+    { id: "v-meridian", name: "Meridian Facilities", legalName: "Meridian Facilities LLC", approved: true, currency: "USD", paymentTerms: "2/10 Net 30" },
   ],
   pos: [
     { id: "po-31000", number: "PO-31000", vendorId: "v-apex", amount: 31000, currency: "USD", status: "open", issueDate: "2026-09-01", description: "Stainless fastener kit blanket — progressive billing", goodsReceived: true },
@@ -18,6 +18,8 @@ const MASTER = {
     { id: "po-eur-19", number: "PO-EUR-19", vendorId: "v-helios", amount: 10603.6, currency: "USD", status: "open", issueDate: "2026-10-05", description: "Precision bearings 6204-2RS", goodsReceived: true },
     { id: "po-7701", number: "PO-7701", vendorId: "v-meridian", amount: 3000, currency: "USD", status: "open", issueDate: "2026-10-08", description: "Q4 HVAC filter replacement", goodsReceived: true },
     { id: "po-7702", number: "PO-7702", vendorId: "v-meridian", amount: 1800, currency: "USD", status: "open", issueDate: "2026-10-08", description: "Emergency rooftop unit service", goodsReceived: true },
+    { id: "po-7740", number: "PO-7740", vendorId: "v-meridian", amount: 2450, currency: "USD", status: "open", issueDate: "2026-10-20", description: "Q4 janitorial services", goodsReceived: true },
+    { id: "po-6120", number: "PO-6120", vendorId: "v-north", amount: 7800, currency: "USD", status: "open", issueDate: "2026-10-25", description: "Cross-dock handling, November", goodsReceived: false },
   ],
   poLines: [
     { id: "pl1", poId: "po-31000", description: "Fastener kit phase deliveries", amount: 31000 },
@@ -54,7 +56,14 @@ const MASTER = {
     { id: "p8", key: "impliedMatchEscalate", value: "0.55", label: "Implied match candidate floor", enabled: true },
     { id: "p9", key: "dateWindowDays", value: "45", label: "PO date window (days)", enabled: true },
     { id: "p10", key: "duplicateDateWindowDays", value: "14", label: "Duplicate date window (days)", enabled: true },
+    { id: "p13", key: "staleInvoiceDays", value: "180", label: "Flag invoices older than (days)", enabled: true },
   ],
+};
+
+/** Verified remittance + tax identity for the demo vendors (as if confirmed by phone at onboarding). */
+const VENDOR_VERIFIED: Record<string, { bankAccount: string; bankCode: string; taxId: string | null }> = {
+  "v-meridian": { bankAccount: "4839201928", bankCode: "021000021", taxId: null },
+  "v-north": { bankAccount: "3302118845", bankCode: "011000015", taxId: null },
 };
 
 const LIMIT_RULES = [
@@ -84,16 +93,43 @@ export async function seedDatabase(orgId: string, opts: { pdfs?: boolean } = {})
   const empty = n === 0;
   const withOrg = <T extends object>(rows: T[]) => rows.map((r) => ({ ...r, orgId }));
 
+  const verified = (v: (typeof MASTER.vendors)[number]) => {
+    const extra = VENDOR_VERIFIED[v.id];
+    return extra ? { ...v, ...extra, bankVerifiedAt: new Date("2026-09-01T00:00:00Z"), bankVerifiedBy: "onboarding call" } : v;
+  };
   if (empty) {
-    await db.insert(t.vendors).values(withOrg(MASTER.vendors)).onConflictDoNothing();
+    await db.insert(t.vendors).values(withOrg(MASTER.vendors.map(verified))).onConflictDoNothing();
     await db.insert(t.purchaseOrders).values(withOrg(MASTER.pos)).onConflictDoNothing();
     await db.insert(t.poLines).values(withOrg(MASTER.poLines)).onConflictDoNothing();
     await db.insert(t.invoices).values(withOrg(MASTER.historyInvoices)).onConflictDoNothing();
     await db.insert(t.matches).values(withOrg(MASTER.historyMatches)).onConflictDoNothing();
     await db.insert(t.invoiceLines).values(withOrg(MASTER.historyLines)).onConflictDoNothing();
   }
+  else await topUpDemoOrg(orgId);
   await seedOrgDefaults(orgId);
 
   if (opts.pdfs !== false) await generateDemoPdfs();
   return { seeded: empty };
+}
+
+/**
+ * Brings an already-seeded DEMO workspace up to date with demo data added later (new POs, verified
+ * vendor bank details). Only runs where the demo vendors exist, inserts only missing rows, and only
+ * fills bank/tax fields that are still empty, so nothing a person changed is overwritten and a real
+ * customer workspace is never touched.
+ */
+async function topUpDemoOrg(orgId: string) {
+  const db = getDb();
+  const [apex] = await db
+    .select({ id: t.vendors.id })
+    .from(t.vendors)
+    .where(sql`${t.vendors.orgId} = ${orgId} and ${t.vendors.id} = 'v-apex'`);
+  if (!apex) return;
+  await db.insert(t.purchaseOrders).values(MASTER.pos.map((p) => ({ ...p, orgId }))).onConflictDoNothing();
+  for (const [id, v] of Object.entries(VENDOR_VERIFIED)) {
+    await db
+      .update(t.vendors)
+      .set({ bankAccount: v.bankAccount, bankCode: v.bankCode, bankVerifiedAt: new Date("2026-09-01T00:00:00Z"), bankVerifiedBy: "onboarding call" })
+      .where(sql`${t.vendors.orgId} = ${orgId} and ${t.vendors.id} = ${id} and ${t.vendors.bankAccount} is null`);
+  }
 }

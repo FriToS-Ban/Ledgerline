@@ -18,6 +18,10 @@ import { authEnabled } from "@/lib/auth/roles";
 // (session, csrf, providers, signin, callback, signout, error) plus register and me; password,
 // users and signout-everywhere are NOT listed, so they require a session.
 const OPEN = [
+  // The agent API authenticates every call with a workspace API key (bearer), not a session.
+  /^\/api\/v1(\/|$)/,
+  // Scheduled jobs (GitHub Actions cron) authenticate with CRON_SECRET.
+  /^\/api\/cron(\/|$)/,
   /^\/api\/health\/?$/,
   /^\/login(\/|$)/,
   /^\/register(\/|$)/,

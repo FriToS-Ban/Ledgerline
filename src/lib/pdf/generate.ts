@@ -84,6 +84,18 @@ async function buildPdf(id: DemoId): Promise<Uint8Array> {
     y -= 36;
     draw("Please apply to the open fastener order.", y, 9);
   }
+  const bank = x.bankDetails;
+  if (bank && (bank.accountNumber || bank.iban)) {
+    y -= 40;
+    if (id === "bank-change") draw("IMPORTANT: our bank details have changed. Please update your records.", y, 10, true);
+    y -= 18;
+    draw("Remit to", y, 10, true);
+    if (bank.accountName) { y -= 14; draw(`Account Name: ${bank.accountName}`, y, 10); }
+    if (bank.routingNumber) { y -= 14; draw(`Routing Number: ${bank.routingNumber}`, y, 10); }
+    if (bank.ifsc) { y -= 14; draw(`IFSC: ${bank.ifsc}`, y, 10); }
+    if (bank.iban) { y -= 14; draw(`IBAN: ${bank.iban}`, y, 10); }
+    if (bank.accountNumber) { y -= 14; draw(`Account Number: ${bank.accountNumber}`, y, 10); }
+  }
 
   return doc.save();
 }

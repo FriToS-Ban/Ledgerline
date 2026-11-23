@@ -21,6 +21,7 @@ const NUMERIC_KEYS = new Set([
   "impliedMatchEscalate",
   "dateWindowDays",
   "duplicateDateWindowDays",
+  "staleInvoiceDays",
 ]);
 
 export const isKnownPolicyKey = (k: unknown): k is string => typeof k === "string" && NUMERIC_KEYS.has(k);

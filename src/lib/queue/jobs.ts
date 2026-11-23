@@ -3,7 +3,7 @@ import { and, asc, eq, lte, or, isNull } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 
-export type JobKind = "process-invoice" | "resume-invoice";
+export type JobKind = "process-invoice" | "resume-invoice" | "deliver-webhook";
 export type JobRow = typeof t.jobs.$inferSelect;
 
 const LEASE_MS = 5 * 60_000;

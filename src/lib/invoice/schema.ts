@@ -53,8 +53,18 @@ export const documentSliceSchema = z.object({
 });
 export type DocumentSlice = z.infer<typeof documentSliceSchema>;
 
+/** Remittance details printed on the invoice (compared with the verified vendor master). */
+export const bankDetailsSchema = z.object({
+  accountNumber: z.string().nullable().optional(),
+  iban: z.string().nullable().optional(),
+  ifsc: z.string().nullable().optional(),
+  swift: z.string().nullable().optional(),
+  routingNumber: z.string().nullable().optional(),
+  accountName: z.string().nullable().optional(),
+});
+
 export const extractionSchema = z.object({
-  source: z.enum(["fixture", "digital", "vision", "tesseract"]),
+  source: z.enum(["fixture", "digital", "vision", "tesseract", "api"]),
   documentKind: z
     .enum(["supplier_invoice", "marketplace_invoice", "order_receipt", "mixed_pack", "unknown"])
     .optional(),
@@ -77,6 +87,7 @@ export const extractionSchema = z.object({
   parties: z.array(partySchema).optional(),
   extras: z.array(extraFieldSchema).optional(),
   slices: z.array(documentSliceSchema).optional(),
+  bankDetails: bankDetailsSchema.nullable().optional(),
   pageCount: z.number().int().default(1),
   classification: z.object({
     digitalPages: z.number().int(),
@@ -168,6 +179,7 @@ export const policySchema = z.object({
   impliedMatchEscalate: z.number(),
   dateWindowDays: z.number(),
   duplicateDateWindowDays: z.number(),
+  staleInvoiceDays: z.number(),
 });
 export type Policy = z.infer<typeof policySchema>;
 
@@ -182,6 +194,7 @@ export const DEFAULT_POLICY: Policy = {
   impliedMatchEscalate: 0.55,
   dateWindowDays: 45,
   duplicateDateWindowDays: 14,
+  staleInvoiceDays: 180,
 };
 
 export const duplicateHitSchema = z.object({
@@ -215,5 +228,15 @@ export const pipelineTraceSchema = z.object({
   duplicates: z.array(duplicateHitSchema),
   rules: z.array(firedRuleSchema),
   decision: decisionResultSchema,
+  /** When and where the money goes if released (absent on traces stored before payments existed). */
+  payment: z
+    .object({
+      dueDate: z.string().nullable(),
+      terms: z.string().nullable(),
+      termsAssumed: z.boolean(),
+      discount: z.object({ pct: z.number(), byDate: z.string() }).nullable(),
+      payTo: z.string().nullable(),
+    })
+    .optional(),
 });
 export type PipelineTrace = z.infer<typeof pipelineTraceSchema>;

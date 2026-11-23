@@ -38,7 +38,8 @@ export async function drainQueue(maxJobs = 50, orgId?: string) {
   return { ran, skipped: false };
 }
 
-async function tick() {
+/** One worker pass: sync master data and mail for the service org, then drain every org's queue. */
+export async function tick() {
   // Folder / ERP / mailbox connectors are deployment-wide: they feed one explicitly configured org.
   const { resolveServiceOrg } = await import("@/lib/db/org");
   const serviceOrg = await resolveServiceOrg().catch(() => null);

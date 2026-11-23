@@ -80,6 +80,28 @@ Speak slowly. Say the bold lines out loud. The "Do" lines are what you click.
 
 ---
 
+### Extra minutes (pick the ones that fit the audience)
+
+**The fraud moment (45 s, use this one first).** On **Invoices**, under "Try a known threat", click **Run this case** under **Changed bank account**.
+
+**Say:** "Same vendor, real PO, right amount. The only thing that changed is the bank account at the bottom: 'our bank details have changed'. That is how most invoice fraud works: someone takes over the vendor's email. The guard compares it with the account we verified when we onboarded the vendor, holds it, and tells the reviewer exactly what to do: call the vendor on a number from our own records, never the one in the email."
+
+**Do:** Point at "Pay to account …4431 (NOT the account on file)" and the checklist.
+
+**Built for Zamp's agents (45 s).** Open **API** in the top bar.
+
+**Say:** "Zamp's agents already read invoices. Before one pays, it can ask Ledgerline: one API call with the fields it extracted, and it gets back release, hold or block with the reasons and a link for the human. The key can never release money itself, and every decision is pushed back by a signed webhook. That makes your agents safe to give a payment button to."
+
+**Do:** Scroll to "Quick start" and show the JSON example and the answer.
+
+**From approval to the bank (30 s).** Open **Payments**.
+
+**Say:** "Approved invoices are ordered by due date. It takes early-payment discounts automatically, and the bank file pays the verified account from the vendor list, never the one printed on an invoice. Each invoice can only be paid once."
+
+**Do:** If a batch exists, show **Bank file** and **Mark paid**; otherwise point at the "Discounts to capture" tile.
+
+---
+
 ## 2. If something goes wrong
 
 | Problem | What to do |
