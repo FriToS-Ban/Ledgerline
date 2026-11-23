@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { DEFAULT_POLICY, type Policy } from "@/lib/invoice/schema";
 import type { HistoricalInvoice, OpenPo } from "@/lib/invoice/match";
 import type { FxRateRow } from "@/lib/invoice/fx";
+import type { VendorProfile } from "@/lib/invoice/rules";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 
@@ -79,13 +80,28 @@ export async function loadFx(orgId: string): Promise<FxRateRow[]> {
   }));
 }
 
-export async function vendorApproved(orgId: string, name: string): Promise<{ id: string | null; approved: boolean }> {
+/** The vendor-master record for an invoice's seller name, or null when it is not a known vendor. */
+export async function loadVendorProfile(orgId: string, name: string): Promise<VendorProfile | null> {
   const db = getDb();
   const rows = await db.select().from(t.vendors).where(eq(t.vendors.orgId, orgId));
   const n = name.toLowerCase();
   const hit = rows.find(
     (v) => v.name.toLowerCase() === n || v.legalName.toLowerCase() === n || n.includes(v.name.toLowerCase()),
   );
+  if (!hit) return null;
+  return {
+    id: hit.id,
+    name: hit.name,
+    approved: hit.approved,
+    taxId: hit.taxId ?? null,
+    bankAccount: hit.bankAccount ?? null,
+    bankCode: hit.bankCode ?? null,
+    paymentTerms: hit.paymentTerms ?? null,
+  };
+}
+
+export async function vendorApproved(orgId: string, name: string): Promise<{ id: string | null; approved: boolean }> {
+  const hit = await loadVendorProfile(orgId, name);
   return { id: hit?.id ?? null, approved: hit?.approved ?? false };
 }
 

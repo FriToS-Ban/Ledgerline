@@ -2,9 +2,10 @@ import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
-import { loadFx, loadHistory, loadOpenPos, loadPolicy, loadCorrections, situationFingerprint, vendorApproved } from "@/lib/domain";
+import { loadFx, loadHistory, loadOpenPos, loadPolicy, loadCorrections, situationFingerprint, loadVendorProfile } from "@/lib/domain";
 import { runPipeline } from "@/lib/invoice/pipeline";
-import { decisionEnum, type PipelineTrace } from "@/lib/invoice/schema";
+import { decisionEnum, type Extraction, type PipelineTrace } from "@/lib/invoice/schema";
+import { emitEvent } from "@/lib/webhooks";
 import { extractInvoice } from "@/lib/pdf/extract";
 import type { DemoId } from "@/lib/fixtures/cases";
 import { DEMO_CASES } from "@/lib/fixtures/cases";
@@ -60,6 +61,8 @@ export async function processCase(opts: {
   demoId?: DemoId;
   pdfBytes?: Uint8Array;
   filename?: string;
+  /** Pre-extracted fields (agent API): skips reading a file. */
+  extraction?: Extraction;
 }): Promise<{ trace: PipelineTrace; needsHuman: boolean }> {
   const { invoiceId, orgId } = opts;
   const db0 = getDb();
@@ -78,15 +81,17 @@ export async function processCase(opts: {
   }
   await emit(orgId, invoiceId, "ingest", "running", { demoId: opts.demoId ?? null });
 
-  let extraction = await extractInvoice({
-    demoId: opts.demoId,
-    pdfBytes: opts.pdfBytes,
-    filename: opts.filename,
-  });
+  let extraction =
+    opts.extraction ??
+    (await extractInvoice({
+      demoId: opts.demoId,
+      pdfBytes: opts.pdfBytes,
+      filename: opts.filename,
+    }));
   try {
     const { enrichExtraction } = await import("@/mastra/enrich-extract");
     const { hasLlmKey } = await import("@/mastra/model");
-    if (hasLlmKey() && !opts.demoId) {
+    if (hasLlmKey() && !opts.demoId && !opts.extraction) {
       await emit(orgId, invoiceId, "mastra-extract", "running", {});
       extraction = await withTimeout(enrichExtraction(extraction), "AI extraction");
       await emit(orgId, invoiceId, "mastra-extract", "success", {
@@ -116,13 +121,14 @@ export async function processCase(opts: {
     },
   });
 
-  const [policy, pos, history, fxRates, vendor] = await Promise.all([
+  const [policy, pos, history, fxRates, profile] = await Promise.all([
     loadPolicy(orgId),
     loadOpenPos(orgId),
     loadHistory(orgId),
     loadFx(orgId),
-    vendorApproved(orgId, extraction.vendorName),
+    loadVendorProfile(orgId, extraction.vendorName),
   ]);
+  const vendor = { id: profile?.id ?? null, approved: profile?.approved ?? false };
 
   await emit(orgId, invoiceId, "normalize", "running", {});
   const trace = runPipeline(extraction, {
@@ -131,6 +137,7 @@ export async function processCase(opts: {
     fxRates,
     policy,
     vendorApproved: vendor.approved,
+    vendor: profile,
   });
   await emit(orgId, invoiceId, "normalize", "success", trace.normalized);
   await emit(orgId, invoiceId, "match", "success", trace.match);
@@ -251,6 +258,7 @@ export async function processCase(opts: {
       currency: extraction.currency,
       total: extraction.total,
       status,
+      dueDate: trace.payment?.dueDate ?? null,
     })
     .where(and(eq(t.invoices.orgId, orgId), eq(t.invoices.id, invoiceId)));
 
@@ -263,6 +271,19 @@ export async function processCase(opts: {
   } else {
     await emit(orgId, invoiceId, "persist", "success", { status });
   }
+
+  await emitEvent(orgId, "invoice.decided", {
+    invoiceId,
+    invoiceNumber: extraction.invoiceNumber,
+    vendor: extraction.vendorName,
+    total: extraction.total,
+    currency: extraction.currency,
+    recommendation: trace.decision.recommendation,
+    needsHuman: trace.decision.needsHuman,
+    confidence: trace.decision.confidence,
+    failedRules: trace.rules.filter((r) => r.outcome === "fail").map((r) => r.ruleId),
+    dueDate: trace.payment?.dueDate ?? null,
+  });
 
   return { trace, needsHuman: trace.decision.needsHuman };
 }
@@ -289,7 +310,7 @@ export async function resumeCase(opts: {
   if (opts.override !== undefined && !decisionEnum.safeParse(opts.override).success) {
     throw new ResumeError("invalid", "override must be one of auto_approve, partial_approve, escalate, reject");
   }
-  return getDb().transaction(async (tx) => {
+  const result = await getDb().transaction(async (tx) => {
     const [decision] = await tx
       .select()
       .from(t.decisions)
@@ -353,6 +374,8 @@ export async function resumeCase(opts: {
     ]);
     return { human };
   });
+  await emitEvent(orgId, "invoice.resolved", { invoiceId: opts.invoiceId, decision: result.human, by: opts.by ?? null, note: opts.note ?? null });
+  return result;
 }
 
 export async function createInvoiceRecord(opts: {
@@ -362,6 +385,9 @@ export async function createInvoiceRecord(opts: {
   filename?: string;
   runId: string;
   pdfPath?: string | null;
+  source?: "upload" | "email" | "api";
+  sender?: string | null;
+  subject?: string | null;
 }) {
   const db = getDb();
   const { orgId } = opts;
@@ -380,6 +406,9 @@ export async function createInvoiceRecord(opts: {
     pdfPath,
     status: "running",
     runId: opts.runId,
+    ...(opts.source && { source: opts.source }),
+    ...(opts.sender !== undefined && { sender: opts.sender }),
+    ...(opts.subject !== undefined && { subject: opts.subject }),
     createdAt: new Date(),
   });
   return id;

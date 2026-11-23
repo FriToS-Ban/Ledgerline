@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { seedOrgDefaults } from "@/lib/db/seed";
+import { seedDatabase, seedOrgDefaults } from "@/lib/db/seed";
 import { getDb } from "@/lib/db/client";
 import * as t from "@/lib/db/schema";
 import { createInvoiceRecord } from "@/lib/process-case";
@@ -33,6 +33,10 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as { demoId?: DemoId };
     demoId = body.demoId;
   }
+
+  // A demo case needs the demo vendor/PO book: seed it into an empty workspace, or top up an older
+  // demo workspace with vendors/POs added since. A workspace with its own (non-demo) vendors is untouched.
+  if (demoId) await seedDatabase(orgId, { pdfs: false });
 
   const runId = randomUUID();
   const invoiceId = randomUUID();

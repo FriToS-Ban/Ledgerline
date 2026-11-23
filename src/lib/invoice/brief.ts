@@ -82,6 +82,23 @@ export function buildBrief(trace: PipelineTrace): DecisionBrief {
     warn: !x.poNumbers.length && x.documentKind !== "marketplace_invoice" && x.documentKind !== "mixed_pack",
   });
 
+  const pay = trace.payment;
+  if (pay?.payTo) {
+    const changed = trace.rules.some((r) => r.ruleId === "bank.changed" && r.outcome === "fail");
+    facts.push({
+      label: "Pay to account",
+      value: changed ? `${pay.payTo} (NOT the account on file)` : pay.payTo,
+      warn: changed,
+    });
+  }
+  if (pay?.dueDate) {
+    const discount = pay.discount ? ` · ${Math.round(pay.discount.pct * 1000) / 10}% off if paid by ${pay.discount.byDate}` : "";
+    facts.push({
+      label: "Due",
+      value: `${pay.dueDate}${discount}${pay.termsAssumed ? " (Net 30 assumed)" : pay.terms ? ` (${pay.terms})` : ""}`,
+    });
+  }
+
   if (n.fx?.missing) {
     facts.push({
       label: "FX",

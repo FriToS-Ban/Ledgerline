@@ -139,6 +139,12 @@ export const vendors = pgTable(
     approved: boolean("approved").notNull().default(true),
     currency: text("currency").notNull().default("USD"),
     paymentTerms: text("payment_terms").notNull().default("Net 30"),
+    /** Verified tax id (GSTIN / VAT / EIN) and remittance details, entered out of band, never from an invoice. */
+    taxId: text("tax_id"),
+    bankAccount: text("bank_account"),
+    bankCode: text("bank_code"),
+    bankVerifiedAt: tstz("bank_verified_at"),
+    bankVerifiedBy: text("bank_verified_by"),
   },
   (t) => [primaryKey({ columns: [t.orgId, t.id] }), index("vendors_org_id").on(t.orgId)],
 );
@@ -190,6 +196,11 @@ export const invoices = pgTable(
     sender: text("sender"),
     subject: text("subject"),
     createdAt: createdAt(),
+    /** Payment scheduling: due date from vendor terms; batch + paid stamp once money moves. */
+    dueDate: text("due_date"),
+    paymentBatchId: text("payment_batch_id"),
+    paidAt: tstz("paid_at"),
+    paymentRef: text("payment_ref"),
   },
   (t) => [primaryKey({ columns: [t.orgId, t.id] }), index("invoices_org_id").on(t.orgId)],
 );
@@ -376,4 +387,85 @@ export const evalCases = pgTable(
     batch: text("batch").notNull(),
   },
   (t) => [primaryKey({ columns: [t.orgId, t.invoiceId] }), index("eval_cases_org_id").on(t.orgId)],
+);
+
+/* ----------------------------------------------------------------- payments */
+
+export const paymentBatches = pgTable(
+  "payment_batches",
+  {
+    orgId: orgId(),
+    id: text("id").notNull(),
+    reference: text("reference").notNull(),
+    currency: text("currency").notNull(),
+    total: doublePrecision("total").notNull(),
+    count: integer("count").notNull(),
+    /** exported: bank file downloaded, waiting for confirmation · paid: confirmed sent · cancelled */
+    status: text("status").notNull().default("exported"),
+    /** The exact bank file handed out (CSV), so a re-download can never differ from what was paid. */
+    file: text("file").notNull(),
+    createdBy: text("created_by"),
+    createdAt: createdAt(),
+    paidAt: tstz("paid_at"),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.id] }), index("payment_batches_org_id").on(t.orgId)],
+);
+
+/* --------------------------------------------------- integrations (agent API) */
+
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    orgId: orgId(),
+    id: text("id").notNull(),
+    name: text("name").notNull(),
+    /** First characters of the key, shown in the UI to tell keys apart ("ll_live_ab12"). */
+    prefix: text("prefix").notNull(),
+    /** sha256 hex of the full key; the key itself is shown once and never stored. */
+    keyHash: text("key_hash").notNull(),
+    createdBy: text("created_by"),
+    createdAt: createdAt(),
+    lastUsedAt: tstz("last_used_at"),
+    revokedAt: tstz("revoked_at"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.id] }),
+    index("api_keys_org_id").on(t.orgId),
+    uniqueIndex("api_keys_key_hash").on(t.keyHash),
+  ],
+);
+
+export const webhooks = pgTable(
+  "webhooks",
+  {
+    orgId: orgId(),
+    id: text("id").notNull(),
+    url: text("url").notNull(),
+    /** Signing secret, AES-256-GCM encrypted with a key derived from AUTH_SECRET. */
+    secretEnc: text("secret_enc").notNull(),
+    events: text("events").notNull().default("*"),
+    active: boolean("active").notNull().default(true),
+    createdBy: text("created_by"),
+    createdAt: createdAt(),
+    lastStatus: integer("last_status"),
+    lastDeliveryAt: tstz("last_delivery_at"),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.id] }), index("webhooks_org_id").on(t.orgId)],
+);
+
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    orgId: orgId(),
+    id: text("id").notNull(),
+    webhookId: text("webhook_id").notNull(),
+    event: text("event").notNull(),
+    payload: text("payload").notNull(),
+    statusCode: integer("status_code"),
+    error: text("error"),
+    attempts: integer("attempts").notNull().default(0),
+    createdAt: createdAt(),
+    deliveredAt: tstz("delivered_at"),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.id] }), index("webhook_deliveries_org_id").on(t.orgId)],
 );

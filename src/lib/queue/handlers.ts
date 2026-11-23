@@ -5,6 +5,8 @@ import { processCase, resumeCase, ResumeError } from "@/lib/process-case";
 import type { DemoId } from "@/lib/fixtures/cases";
 import type { JobRow } from "./jobs";
 import { getStorage, keyBelongsToOrg, readAll } from "@/lib/storage";
+import { deliverWebhook } from "@/lib/webhooks";
+import { extractionSchema, type Extraction } from "@/lib/invoice/schema";
 
 async function loadBytes(orgId: string, pdfPath: string | null): Promise<Uint8Array | undefined> {
   // Uploaded files are storage keys under org/<orgId>/; demo fixtures (/demos/...) are not stored.
@@ -13,7 +15,14 @@ async function loadBytes(orgId: string, pdfPath: string | null): Promise<Uint8Ar
   return stream ? readAll(stream) : undefined;
 }
 
-export async function processInvoiceJob(data: { orgId: string; invoiceId: string; demoId?: string | null; filename?: string }) {
+export async function processInvoiceJob(data: {
+  orgId: string;
+  invoiceId: string;
+  demoId?: string | null;
+  filename?: string;
+  /** Fields extracted by the API caller's own system (agent API "bring your own extraction"). */
+  extraction?: unknown;
+}) {
   const [inv] = await getDb()
     .select()
     .from(t.invoices)
@@ -25,7 +34,8 @@ export async function processInvoiceJob(data: { orgId: string; invoiceId: string
     invoiceId: data.invoiceId,
     demoId: (data.demoId ?? undefined) as DemoId | undefined,
     filename: data.filename,
-    pdfBytes: await loadBytes(data.orgId, inv.pdfPath),
+    pdfBytes: data.extraction ? undefined : await loadBytes(data.orgId, inv.pdfPath),
+    extraction: data.extraction ? (extractionSchema.parse(data.extraction) as Extraction) : undefined,
   });
 }
 
@@ -42,5 +52,6 @@ export async function runJob(job: JobRow) {
     }
     return;
   }
+  if (job.kind === "deliver-webhook") return deliverWebhook(data.orgId, String(data.deliveryId));
   throw new Error(`unknown job kind ${job.kind}`);
 }

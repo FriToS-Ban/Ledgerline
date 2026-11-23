@@ -1,5 +1,6 @@
 import type { DocumentSlice, ExtraField, Extraction, LineItem, Party } from "@/lib/invoice/schema";
 import { round2 } from "@/lib/utils";
+import { parseBankDetails } from "@/lib/invoice/bank";
 
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif|bmp|tiff?)$/i;
 const PDF_EXT = /\.pdf$/i;
@@ -316,6 +317,7 @@ export function parseInvoiceText(text: string): Extraction {
     extras,
     slices,
     pageCount: 1,
+    bankDetails: parseBankDetails(text),
     classification: { digitalPages: 1, scannedPages: 0, mixed: false },
     rawText: text,
   };

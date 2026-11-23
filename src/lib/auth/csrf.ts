@@ -11,7 +11,8 @@ import { trustProxy } from "./net";
  *    such as curl or a server job; browsers always send Origin on cross-site POST/PUT/PATCH/DELETE).
  * Webhook routes that authenticate with their own shared secret are exempt.
  */
-export const CSRF_EXEMPT = [/^\/api\/intake\/email\/?$/, /^\/api\/inngest(\/|$)/];
+// Bearer-key APIs and secret-authenticated endpoints never read cookies, so CSRF does not apply to them.
+export const CSRF_EXEMPT = [/^\/api\/intake\/email\/?$/, /^\/api\/inngest(\/|$)/, /^\/api\/v1(\/|$)/, /^\/api\/cron(\/|$)/];
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
 
 export const isCsrfExempt = (pathname: string) => CSRF_EXEMPT.some((r) => r.test(pathname));

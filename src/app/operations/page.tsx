@@ -202,7 +202,8 @@ export default function OperationsPage() {
           </div>
         </div>
         <p className="mt-2 text-sm text-text-mute">
-          Files: <code>vendors.csv</code> (name, approved, currency, payment_terms), <code>pos.csv</code> (number, vendor,
+          Files: <code>vendors.csv</code> (name, approved, currency, payment_terms, and optionally the verified tax_id / gstin,
+          bank_account / iban, bank_code / ifsc / swift / routing_number), <code>pos.csv</code> (number, vendor,
           amount, currency, issue_date, description, status, goods_received), <code>po_lines.csv</code> (po_number,
           description, amount). Drop them in <code>data/master</code> and the worker re-imports on change.
         </p>

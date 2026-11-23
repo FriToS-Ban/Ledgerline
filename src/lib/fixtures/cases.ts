@@ -8,7 +8,9 @@ export type DemoId =
   | "near-dup-2"
   | "fx-eur"
   | "multi-po"
-  | "low-confidence";
+  | "low-confidence"
+  | "bank-change"
+  | "no-receipt";
 
 export const DEMO_CASES: {
   id: DemoId;
@@ -63,6 +65,18 @@ export const DEMO_CASES: {
     title: "Low-confidence scan",
     subtitle: "Critical fields below 70% — refuse to invent, force review",
     file: "low-confidence.pdf",
+  },
+  {
+    id: "bank-change",
+    title: "Changed bank account",
+    subtitle: "Known vendor, valid PO, but the invoice asks to pay a new account: classic email-compromise fraud",
+    file: "bank-change.pdf",
+  },
+  {
+    id: "no-receipt",
+    title: "Billed before delivery",
+    subtitle: "PO and amount match, but no goods receipt yet: 3-way match holds it",
+    file: "no-receipt.pdf",
   },
 ];
 
@@ -310,5 +324,68 @@ export const FIXTURES: Record<DemoId, Extraction> = {
     annotations: ["hold"],
     pageCount: 1,
     classification: { digitalPages: 0, scannedPages: 1, mixed: false },
+  },
+  "bank-change": {
+    source: "fixture",
+    vendorName: "Meridian Facilities",
+    vendorConfidence: 0.97,
+    invoiceNumber: "MF-3342",
+    invoiceNumberConfidence: 0.98,
+    invoiceDate: "2026-11-05",
+    invoiceDateConfidence: 0.98,
+    currency: "USD",
+    poNumbers: ["PO-7740"],
+    lineItems: [
+      {
+        id: "l1",
+        description: "Q4 janitorial services, November",
+        quantity: 1,
+        unitPrice: 2450,
+        amount: 2450,
+        taxIncluded: false,
+      },
+    ],
+    subtotal: 2450,
+    tax: 0,
+    shipping: 0,
+    total: 2450,
+    totalConfidence: 0.98,
+    annotations: [],
+    bankDetails: {
+      accountNumber: "7712004431",
+      routingNumber: "026009593",
+      accountName: "Meridian Facilities LLC",
+    },
+    pageCount: 1,
+    classification: baseClass,
+  },
+  "no-receipt": {
+    source: "fixture",
+    vendorName: "Northwind Logistics",
+    vendorConfidence: 0.97,
+    invoiceNumber: "NW-5610",
+    invoiceNumberConfidence: 0.98,
+    invoiceDate: "2026-11-03",
+    invoiceDateConfidence: 0.98,
+    currency: "USD",
+    poNumbers: ["PO-6120"],
+    lineItems: [
+      {
+        id: "l1",
+        description: "Cross-dock handling, November",
+        quantity: 1,
+        unitPrice: 7800,
+        amount: 7800,
+        taxIncluded: false,
+      },
+    ],
+    subtotal: 7800,
+    tax: 0,
+    shipping: 0,
+    total: 7800,
+    totalConfidence: 0.98,
+    annotations: [],
+    pageCount: 1,
+    classification: baseClass,
   },
 };
