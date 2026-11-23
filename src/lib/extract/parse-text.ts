@@ -198,9 +198,11 @@ export function parseInvoiceText(text: string): Extraction {
     parseMoney(grab(text, /(?:Shipping|Freight)[ \t]*[:#]?[ \t]*[₹$€£]?[ \t]*([0-9][0-9,]*\.?[0-9]*)/i));
 
   const lineItems: LineItem[] = [];
+  // The row total is the LAST number of the row ("... 2.5% 5.35 224.7"); it may have 1-3 decimals,
+  // so the amount must not be followed by more digits, a dot or a "%".
   const qtyLines = [
     ...text.matchAll(
-      /(\d+)\s*x\s+([A-Za-z][A-Za-z0-9 ,&'()/+-]{2,70}?)\s+(?:[\d.]+\s*%?\s+){0,10}(\d+\.\d{2,3})/g,
+      /(\d+)\s*x\s+([A-Za-z][A-Za-z0-9 ,&'()/+-]{2,70}?)\s+(?:[\d.]+\s*%?\s+){0,10}(\d+\.\d{1,3})(?![\d.%])/g,
     ),
   ];
   let i = 0;

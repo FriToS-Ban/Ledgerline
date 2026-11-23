@@ -17,7 +17,9 @@ Optional durable runner (set `INNGEST_DEV=1` in `.env.local`; without it the dev
 npm run dev:inngest
 ```
 
-Optional live vision: set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Without a key, seeded fixtures and digital PDF parse still run; scanned pages fall back to Tesseract.
+Optional live vision: set `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Without a key, seeded fixtures and digital PDF parse still run; scanned pages are rendered and OCR'd with Tesseract (the English model is downloaded once from the jsDelivr CDN and cached in the OS temp dir, so the server needs outbound internet the first time).
+
+PDF reading runs pdf.js on the server. Its worker, resource folders, the `@napi-rs/canvas` renderer and Tesseract's WASM core are loaded by computed paths that Next's file tracer cannot see, so `next.config.ts` lists them in `outputFileTracingIncludes`; without that, standalone/Docker builds read every PDF as empty. If you add another runtime-loaded package, add it there too and check `.next/standalone/node_modules` after `npm run build`.
 
 Open http://localhost:3000 (the Command page) and run the Friday demo from the Command page.
 

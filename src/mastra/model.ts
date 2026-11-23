@@ -77,6 +77,30 @@ export function resolveMastraModel(): ResolvedModel | null {
   }
 }
 
+const VISION_MODELS: Record<Exclude<Provider, "nvidia">, () => string> = {
+  google: () => process.env.GOOGLE_MODEL ?? "google/gemini-3.5-flash-lite",
+  anthropic: () => "anthropic/claude-sonnet-4-5",
+  openai: () => "openai/gpt-4o",
+};
+
+/**
+ * A model that can read a PDF/image directly. The NVIDIA Nemotron model is text-only, so it is
+ * never used here even when LLM_PROVIDER=nvidia: the first key among google/anthropic/openai wins.
+ */
+export function resolveVisionModel(): string | null {
+  const active = activeProvider();
+  const keyed: Record<Exclude<Provider, "nvidia">, boolean> = {
+    google: !!googleKey(),
+    anthropic: !!process.env.ANTHROPIC_API_KEY,
+    openai: !!process.env.OPENAI_API_KEY,
+  };
+  const pick =
+    active && active !== "nvidia" && keyed[active]
+      ? active
+      : (["google", "anthropic", "openai"] as const).find((p) => keyed[p]);
+  return pick ? VISION_MODELS[pick]() : null;
+}
+
 export function modelLabel(): string | null {
   switch (activeProvider()) {
     case "google":

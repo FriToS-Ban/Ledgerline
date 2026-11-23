@@ -78,10 +78,37 @@ const nextConfig: NextConfig = {
     "@mastra/loggers",
     "tesseract.js",
     "pdfjs-dist",
+    "@napi-rs/canvas",
     "inngest",
     "imapflow",
     "mailparser",
   ],
+  /**
+   * Files the standalone build (Docker / `node .next/standalone/server.js` / Vercel) must ship but
+   * the tracer cannot find, because they are loaded by computed paths at runtime: pdf.js's worker and
+   * resource folders, the native canvas pdf.js renders scanned pages with, and Tesseract's worker
+   * script + WASM core. Without them every uploaded PDF read as empty in production.
+   */
+  outputFileTracingIncludes: {
+    "/api/**/*": [
+      "./node_modules/pdfjs-dist/package.json",
+      "./node_modules/pdfjs-dist/legacy/build/pdf.mjs",
+      "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+      "./node_modules/pdfjs-dist/cmaps/**/*",
+      "./node_modules/pdfjs-dist/standard_fonts/**/*",
+      "./node_modules/pdfjs-dist/wasm/**/*",
+      "./node_modules/pdfjs-dist/iccs/**/*",
+      "./node_modules/@napi-rs/canvas/**/*",
+      "./node_modules/@napi-rs/canvas-*/**/*",
+      "./node_modules/tesseract.js/**/*",
+      "./node_modules/tesseract.js-core/**/*",
+      "./node_modules/wasm-feature-detect/**/*",
+      "./node_modules/bmp-js/**/*",
+      "./node_modules/zlibjs/**/*",
+      "./node_modules/is-url/**/*",
+      "./node_modules/regenerator-runtime/**/*",
+    ],
+  },
   turbopack: {
     rules: {
       "*.css": {

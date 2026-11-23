@@ -36,6 +36,21 @@ describe("parseInvoiceText", () => {
   });
 });
 
+describe("Zomato item rows", () => {
+  it("takes the row total even when it has one decimal place", () => {
+    const x = parseInvoiceText(`Tax Invoice
+Legal Entity Name : THAKUR MAHENDRA ASHOK
+Invoice No. : 25AAIEFP00016116
+1 x Tandoori Chicken\t169\t0\t169\t2.5%\t4.225\t2.5%\t4.225 177.45
+1 x Chicken Biryani\t214\t0\t214\t2.5%\t5.35\t2.5%\t5.35\t224.7
+Item(s) Total\t383\t0\t383\t9.575\t9.575 402.15`);
+    expect(x.lineItems.map((l) => [l.description, l.amount])).toEqual([
+      ["Tandoori Chicken", 177.45],
+      ["Chicken Biryani", 224.7],
+    ]);
+  });
+});
+
 describe("cleanPersonName", () => {
   it("strips Delivery Address glued onto the name", () => {
     expect(cleanPersonName("Shibasish Banerjee Delivery Address")).toBe("Shibasish Banerjee");
