@@ -1,0 +1,28 @@
+name: Worker tick
+
+# Serverless hosts (Vercel) keep no background loop, so this free scheduled job runs the worker:
+# retries webhook deliveries and queued invoices, polls the mailbox, syncs the ERP.
+# Setup: add repository secret CRON_SECRET (>= 24 random chars) and the same value as the
+# CRON_SECRET environment variable on the deployment. Optional repository variable LEDGERLINE_URL.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      LEDGERLINE_URL: ${{ vars.LEDGERLINE_URL || 'https://ledgerline-jade-three.vercel.app' }}
+    steps:
+      - name: Call /api/cron/tick
+        if: env.CRON_SECRET != ''
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 90 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$LEDGERLINE_URL/api/cron/tick"
+      - name: Not configured
+        if: env.CRON_SECRET == ''
+        run: echo "CRON_SECRET is not set; skipping (see the comment at the top of this file)."
