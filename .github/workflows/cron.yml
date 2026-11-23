@@ -2,27 +2,35 @@ name: Worker tick
 
 # Serverless hosts (Vercel) keep no background loop, so this free scheduled job runs the worker:
 # retries webhook deliveries and queued invoices, polls the mailbox, syncs the ERP.
-# Setup: add repository secret CRON_SECRET (>= 24 random chars) and the same value as the
-# CRON_SECRET environment variable on the deployment. Optional repository variable LEDGERLINE_URL.
+# Auth needs no secret: the job asks GitHub for a short-lived OIDC token (audience ledgerline-cron)
+# and the app verifies GitHub's signature, this repository, the main branch and this workflow file.
+# Optional repository variable LEDGERLINE_URL points it at another deployment.
 on:
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: worker-tick
+  cancel-in-progress: false
 
 jobs:
   tick:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     env:
-      CRON_SECRET: ${{ secrets.CRON_SECRET }}
       LEDGERLINE_URL: ${{ vars.LEDGERLINE_URL || 'https://ledgerline-jade-three.vercel.app' }}
     steps:
-      - name: Call /api/cron/tick
-        if: env.CRON_SECRET != ''
+      - name: Call /api/cron/tick with a GitHub OIDC token
         run: |
+          TOKEN=$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=ledgerline-cron" | jq -r .value)
+          echo "::add-mask::$TOKEN"
           curl --fail-with-body --silent --show-error --max-time 90 \
-            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Authorization: Bearer $TOKEN" \
             "$LEDGERLINE_URL/api/cron/tick"
-      - name: Not configured
-        if: env.CRON_SECRET == ''
-        run: echo "CRON_SECRET is not set; skipping (see the comment at the top of this file)."

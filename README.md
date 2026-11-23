@@ -97,7 +97,7 @@ Running a demo case seeds the demo vendor/PO book into an empty workspace, or to
 ## Deploying for free
 
 - **Vercel** builds with `npm run vercel-build`, which applies pending migrations (`scripts/migrate-build.ts`) before `next build`, so new tables reach the database on every deploy. Migrations are additive so the previous deployment keeps working until the new one is live. Note: Vercel's free Hobby plan is for non-commercial use; for paying customers use Vercel Pro, or self-host the Docker image (`docker compose up -d`) on any always-free VM (e.g. Oracle Cloud Always Free) with Neon or Supabase free Postgres and Cloudflare R2 (10 GB free) for files.
-- **Scheduled worker:** set `CRON_SECRET` (>= 24 chars) on the deployment and as a GitHub repository secret; `.github/workflows/cron.yml` then calls `/api/cron/tick` every 10 minutes for free (webhook retries, mailbox polling, ERP sync).
+- **Scheduled worker:** `.github/workflows/cron.yml` calls `/api/cron/tick` every 10 minutes for free (webhook retries, mailbox polling, ERP sync). It needs no secret: the job sends a GitHub Actions OIDC token and the app verifies GitHub's signature, the repository (`CRON_GITHUB_REPOSITORY`, default `FriToS-Ban/Ledgerline`), the `main` branch and the workflow file (`src/lib/cron-auth.ts`). Other schedulers can send `Authorization: Bearer $CRON_SECRET` instead.
 - **CI:** `.github/workflows/ci.yml` runs lint, typecheck, the full test suite against Postgres and a production build on every push and pull request.
 
 ## Operations: email intake, vendor/PO book, durable queue
